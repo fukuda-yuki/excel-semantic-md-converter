@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+.vs/
+.dotnet-home/
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+*.binlog
+*.log
+!tests/**/*.log
