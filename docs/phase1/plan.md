@@ -1,7 +1,7 @@
 # Phase 1 Plan / Requirements
 
 この文書は Phase 1 の要件定義と、詳細仕様化前に確認した判断を管理する。
-プロダクト仕様・実装方針・優先順位の正は `README.md` とし、矛盾がある場合は原則 `README.md` を優先する。
+プロダクト仕様・実装方針・優先順位の正は `docs/phase1/spec.md` とし、矛盾がある場合は原則 `docs/phase1/spec.md` を優先する。
 
 ## 1. 目的
 

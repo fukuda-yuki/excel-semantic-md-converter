@@ -1,8 +1,8 @@
 # Phase 1 Knowledge Notes
 
 この文書は Phase 1 実装時の補助知識、外部制約、検証メモを置く場所である。
-プロダクト仕様・実装方針・優先順位の正は `README.md` とし、この文書は source of truth ではない。
-`docs/phase1/spec.md` は README を前提にした Phase 1 詳細仕様として扱う。
+プロダクト仕様・実装方針・優先順位の正は `docs/phase1/spec.md` とし、この文書は source of truth ではない。
+`README.md` はプロジェクト背景・全体像・初期構想の参考資料として扱う。
 
 ## 1. Excel COM
 
@@ -103,3 +103,18 @@ Phase 1 では `excel-semantic-md setup` を用意する。
 - debug JSON と logs はユーザーデータを含みうるため、既定では出力しない。
 - `SKILL.md` には変換ロジック、prompt 本体、LLM response contract を置かない。
 - skill の `allowed-tools` は最小権限にする。
+
+## 11. phase1-skeleton-models 実装メモ
+
+2026-04-21 の `phase1-skeleton-models` では、README と phase 文書の Source of Truth 記述を `docs/phase1/spec.md` 優先に揃えた。
+README は背景・全体像・初期構想の参考資料として扱う。
+
+- 共通モデルは `src/excel_semantic_md/models.py` の単一モジュールから開始する。肥大化した場合に package 分割を検討する。
+- 初期 CLI は `argparse` で実装し、外部 CLI 依存を追加しない。
+- skeleton の `setup` / `convert` / `inspect` / `render` は引数表面だけを用意し、未実装として非 0 を返す。
+- `resume` コマンドと `--resume` オプションは作らない。
+- `schema_version` の初期値は `phase1.0` とする。
+- sheet index は workbook 内の 1-based sheet 順を使い、hidden sheet 除外後に詰め直さない。
+- block ID は `s{sheet_index:03d}-b{block_index:03d}-{kind}` とする。
+- asset path は `assets/sheet-{sheet_index:03d}/...png` とし、sheet index、block id、asset kind、連番を含める。block id が同じ kind で終わる場合は kind を重複させない。
+- `SheetModel` は sheet 単位の複数 failure を表せるよう `failures: list[FailureInfo]` を持つ。

@@ -1,7 +1,7 @@
 # Phase 1 Task Breakdown
 
 この文書は `docs/phase1/spec.md` を実装タスクに分解したチェックリストである。
-プロダクト仕様・実装方針・優先順位の正は `README.md` とする。
+プロダクト仕様・実装方針・優先順位の正は `docs/phase1/spec.md` とする。
 Phase 1 では `resume` / session persistence を実装しない。
 
 ## 0. ドキュメント整合
@@ -12,38 +12,38 @@ Phase 1 では `resume` / session persistence を実装しない。
 
 ## 1. プロジェクト骨格
 
-- [ ] `pyproject.toml` を作成する。
-- [ ] Python package 名を `excel_semantic_md` として定義する。
-- [ ] CLI entry point `excel-semantic-md` を定義する。
-- [ ] `src/excel_semantic_md/app/` を作成する。
-- [ ] `src/excel_semantic_md/excel/` を作成する。
-- [ ] `src/excel_semantic_md/render/` を作成する。
-- [ ] `src/excel_semantic_md/llm/` を作成する。
-- [ ] `src/excel_semantic_md/output/` を作成する。
-- [ ] `src/excel_semantic_md/cli/` を作成する。
-- [ ] `skills/excel-semantic-markdown/` を作成する。
-- [ ] runtime 出力が commit されないよう `.gitignore` を確認する。
+- [x] `pyproject.toml` を作成する。
+- [x] Python package 名を `excel_semantic_md` として定義する。
+- [x] CLI entry point `excel-semantic-md` を定義する。
+- [x] `src/excel_semantic_md/app/` を作成する。
+- [x] `src/excel_semantic_md/excel/` を作成する。
+- [x] `src/excel_semantic_md/render/` を作成する。
+- [x] `src/excel_semantic_md/llm/` を作成する。
+- [x] `src/excel_semantic_md/output/` を作成する。
+- [x] `src/excel_semantic_md/cli/` を作成する。
+- [x] `skills/excel-semantic-markdown/` を作成する。
+- [x] runtime 出力が commit されないよう `.gitignore` を確認する。
 
 ## 2. 共通モデル
 
-- [ ] `Rect` を定義する。
-- [ ] `Block` の共通フィールドを定義する。
-- [ ] `HeadingBlock` を定義する。
-- [ ] `ParagraphBlock` を定義する。
-- [ ] `TableBlock` を定義する。
-- [ ] `ShapeBlock` を定義する。
-- [ ] `ImageBlock` を定義する。
-- [ ] `ChartBlock` を定義する。
-- [ ] `NoteBlock` を定義する。
-- [ ] `UnknownBlock` を定義する。
-- [ ] `SheetModel` を定義する。
-- [ ] `WorkbookModel` を定義する。
-- [ ] `AssetRef` を定義する。
-- [ ] `Warning` / `Unknown` / `Failure` の表現を定義する。
-- [ ] モデルを Copilot SDK と skill から独立させる。
-- [ ] JSON 直列化形式を定義する。
-- [ ] block ID 生成を安定化する。
-- [ ] asset ID 生成を安定化する。
+- [x] `Rect` を定義する。
+- [x] `Block` の共通フィールドを定義する。
+- [x] `HeadingBlock` を定義する。
+- [x] `ParagraphBlock` を定義する。
+- [x] `TableBlock` を定義する。
+- [x] `ShapeBlock` を定義する。
+- [x] `ImageBlock` を定義する。
+- [x] `ChartBlock` を定義する。
+- [x] `NoteBlock` を定義する。
+- [x] `UnknownBlock` を定義する。
+- [x] `SheetModel` を定義する。
+- [x] `WorkbookModel` を定義する。
+- [x] `AssetRef` を定義する。
+- [x] `Warning` / `Unknown` / `Failure` の表現を定義する。
+- [x] モデルを Copilot SDK と skill から独立させる。
+- [x] JSON 直列化形式を定義する。
+- [x] block ID 生成を安定化する。
+- [x] asset ID 生成を安定化する。
 
 ## 3. CLI
 
@@ -216,18 +216,18 @@ Phase 1 では `resume` / session persistence を実装しない。
 
 ## 12. Copilot Skill
 
-- [ ] `skills/excel-semantic-markdown/SKILL.md` を作成する。
-- [ ] `run_excel_semantic_md.ps1` を作成する。
-- [ ] `examples.md` を作成する。
-- [ ] skill の責務を起動ラッパーに限定する。
-- [ ] 入力ファイルパス確認を記載する。
-- [ ] 出力ディレクトリ確認を記載する。
-- [ ] Python CLI 呼び出しを記載する。
-- [ ] 結果の保存先を案内する。
-- [ ] `SKILL.md` に prompt 本体を書かない。
-- [ ] `SKILL.md` に LLM response contract を書かない。
-- [ ] `SKILL.md` に変換ロジックを書かない。
-- [ ] `allowed-tools` を最小権限にする。
+- [x] `skills/excel-semantic-markdown/SKILL.md` を作成する。
+- [x] `run_excel_semantic_md.ps1` を作成する。
+- [x] `examples.md` を作成する。
+- [x] skill の責務を起動ラッパーに限定する。
+- [x] 入力ファイルパス確認を記載する。
+- [x] 出力ディレクトリ確認を記載する。
+- [x] Python CLI 呼び出しを記載する。
+- [x] 結果の保存先を案内する。
+- [x] `SKILL.md` に prompt 本体を書かない。
+- [x] `SKILL.md` に LLM response contract を書かない。
+- [x] `SKILL.md` に変換ロジックを書かない。
+- [x] `allowed-tools` を最小権限にする。
 
 ## 13. Fixture / Test
 
@@ -254,7 +254,7 @@ Phase 1 では `resume` / session persistence を実装しない。
 
 ## 14. Validation
 
-- [ ] `python -m pip install -e .` で local install できることを確認する。
+- [x] `python -m pip install -e .` で local install できることを確認する。
 - [ ] `excel-semantic-md inspect --input <fixture>` を実行する。
 - [ ] `excel-semantic-md setup` を実行する。
 - [ ] `excel-semantic-md convert --input <fixture> --out <out>` を実行する。
@@ -269,15 +269,15 @@ Phase 1 では `resume` / session persistence を実装しない。
 
 ## 15. Review
 
-- [ ] README との整合性を確認する。
-- [ ] `resume` / `--resume` が Phase 1 対象外として整理されていることを確認する。
-- [ ] skill に変換ロジックが入っていないことを確認する。
+- [x] README との整合性を確認する。
+- [x] `resume` / `--resume` が Phase 1 対象外として整理されていることを確認する。
+- [x] skill に変換ロジックが入っていないことを確認する。
 - [ ] prompt と response contract が Python 側にあることを確認する。
 - [ ] 画像をもとにした LLM 分析が主情報ではなく補足情報として扱われていることを確認する。
-- [ ] 中間表現が Copilot SDK 非依存であることを確認する。
+- [x] 中間表現が Copilot SDK 非依存であることを確認する。
 - [ ] workbook 全体を 1 prompt にしていないことを確認する。
 - [ ] row 単位 LLM 解釈になっていないことを確認する。
 - [ ] 全画像を無差別に送っていないことを確認する。
 - [ ] Excel COM cleanup の失敗リスクを確認する。
 - [ ] `.xlsm` マクロ無効契約を確認する。
-- [ ] generated runtime outputs や private workbook を commit していないことを確認する。
+- [x] generated runtime outputs や private workbook を commit していないことを確認する。

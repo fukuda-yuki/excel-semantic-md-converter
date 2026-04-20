@@ -11,3 +11,28 @@
 *.binlog
 *.log
 !tests/**/*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Local runtime outputs from manual CLI runs
+/out/
+/outputs/
+/debug/
+/logs/
+/assets/
+/manifest.json
+/result.md
+
+# Local Excel temporary lock files
+~$*.xlsx
+~$*.xlsm

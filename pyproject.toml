@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "excel-semantic-md"
+version = "0.1.0"
+description = "Local CLI for converting Excel workbooks into semantic Markdown."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [
+  { name = "excel-semantic-md contributors" },
+]
+dependencies = []
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8",
+]
+
+[project.scripts]
+excel-semantic-md = "excel_semantic_md.cli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/excel_semantic_md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
