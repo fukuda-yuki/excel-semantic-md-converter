@@ -47,6 +47,7 @@ Phase 1 では `resume` / session persistence を実装しない。
 
 ## 3. CLI
 
+- [ ] `excel-semantic-md setup` を実装する。
 - [ ] `excel-semantic-md convert --input <path> --out <dir>` を実装する。
 - [ ] `excel-semantic-md inspect --input <path>` を実装する。
 - [ ] `excel-semantic-md render --input <path> --sheet <name>` を実装する。
@@ -61,6 +62,20 @@ Phase 1 では `resume` / session persistence を実装しない。
 - [ ] 出力ディレクトリを作成する。
 - [ ] Phase 1 では `resume` コマンドを実装しない。
 - [ ] Phase 1 では `--resume` オプションを実装しない。
+
+### 3.1 Setup
+
+- [ ] `setup` で Python package と CLI entry point を確認する。
+- [ ] `setup` で Windows 環境かどうかを確認する。
+- [ ] `setup` で Excel COM を利用できる可能性を確認する。
+- [ ] `setup` で Copilot CLI を利用できる可能性を確認する。
+- [ ] `setup` で Copilot CLI のサインイン状態を確認できる場合は確認する。
+- [ ] `setup` で skill launcher の配置先または利用方法を案内する。
+- [ ] `setup` で指定された出力先の書き込み可能性を確認する。
+- [ ] `setup` は自動的な外部インストールを行わない。
+- [ ] `setup` は認証情報を保存しない。
+- [ ] `setup` はユーザー workbook を開いたり変更したりしない。
+- [ ] `setup` の結果を、人間が読める診断レポートとして出力する。
 
 ## 4. Workbook 読み取り
 
@@ -142,6 +157,7 @@ Phase 1 では `resume` / session persistence を実装しない。
 - [ ] `--vision-model` 指定時だけ vision model 指定を渡す。
 - [ ] prompt builder を実装する。
 - [ ] Excel 内テキストを instruction ではなく data として扱う prompt を作る。
+- [ ] 画像をもとにした LLM 分析を補足情報として扱う prompt を作る。
 - [ ] attachment builder を実装する。
 - [ ] 近傍画像だけを attachment にする。
 - [ ] `--max-images-per-sheet` による画像数制限を実装する。
@@ -240,6 +256,7 @@ Phase 1 では `resume` / session persistence を実装しない。
 
 - [ ] `python -m pip install -e .` で local install できることを確認する。
 - [ ] `excel-semantic-md inspect --input <fixture>` を実行する。
+- [ ] `excel-semantic-md setup` を実行する。
 - [ ] `excel-semantic-md convert --input <fixture> --out <out>` を実行する。
 - [ ] `result.md` が生成されることを確認する。
 - [ ] `manifest.json` が生成されることを確認する。
@@ -256,6 +273,7 @@ Phase 1 では `resume` / session persistence を実装しない。
 - [ ] `resume` / `--resume` が Phase 1 対象外として整理されていることを確認する。
 - [ ] skill に変換ロジックが入っていないことを確認する。
 - [ ] prompt と response contract が Python 側にあることを確認する。
+- [ ] 画像をもとにした LLM 分析が主情報ではなく補足情報として扱われていることを確認する。
 - [ ] 中間表現が Copilot SDK 非依存であることを確認する。
 - [ ] workbook 全体を 1 prompt にしていないことを確認する。
 - [ ] row 単位 LLM 解釈になっていないことを確認する。

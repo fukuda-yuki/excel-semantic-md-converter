@@ -52,6 +52,7 @@ Phase 1 の原則は「Markdown で自然に再現できるものは Markdown、
 - 元から画像である要素は、意味解釈に必要なら画像として貼る。
 - テキスト入り図形はテキスト抽出を優先し、見た目が意味を持つ場合は画像も貼る。
 - Range 画像はセル範囲のスクリーンショットであり、通常は LLM 補助または debug 用である。
+- 画像をもとにした LLM 分析は、セル値、OOXML メタデータ、block 検出結果を補うための補足情報である。
 - 孤立した図形、画像、グラフは破棄せず、独立セクションとして扱う。
 
 ## 6. LLM / Copilot SDK
@@ -63,10 +64,22 @@ Phase 1 の原則は「Markdown で自然に再現できるものは Markdown、
 - prompt construction と response contract は Python 側に置く。
 - Excel 内テキストは prompt instruction ではなく data として扱う。
 - 画像 attachment は関連する近傍画像だけに限定する。
+- 画像 attachment の分析結果は主情報ではなく補足情報として扱う。
 - LLM 応答が壊れた場合は 1 回だけ再試行する。
 - 再試行しても失敗する場合は該当 sheet を failed とし、他 sheet を継続する。
 
-## 7. Phase 1 Exclusions
+## 7. Setup Command
+
+Phase 1 では `excel-semantic-md setup` を用意する。
+
+- ローカル実行に必要な前提を確認する。
+- Excel COM、Copilot CLI、skill launcher、出力先権限などの不足を案内する。
+- 自動的な外部インストールは行わない。
+- 認証情報は保存しない。
+- ユーザー workbook を開いたり変更したりしない。
+- setup 成功は end-to-end 変換成功を保証しない。
+
+## 8. Phase 1 Exclusions
 
 2026-04-21 のユーザー回答により Phase 1 では `resume` / session persistence は不要と判断した。
 
@@ -74,7 +87,7 @@ Phase 1 の原則は「Markdown で自然に再現できるものは Markdown、
 - `--resume` オプションは実装しない。
 - session persistence は実装しない。
 
-## 8. Test Strategy
+## 9. Test Strategy
 
 - 通常の自動テストは synthetic workbook fixture を使う。
 - private workbook、生成済み runtime logs、debug dumps、rendered assets は commit しない。
@@ -83,7 +96,7 @@ Phase 1 の原則は「Markdown で自然に再現できるものは Markdown、
 - `.xlsm` macro-disabled behavior も live confirmation として扱う。
 - LLM 品質は完全自動判定しにくいため、代表 workbook での有用性確認も Phase 1 成功判定に含める。
 
-## 9. Security Notes
+## 10. Security Notes
 
 - secrets、Copilot credentials、local connection strings を保存しない。
 - Excel 内のテキストには prompt injection が含まれうる。
