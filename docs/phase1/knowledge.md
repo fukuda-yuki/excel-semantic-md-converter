@@ -1,17 +1,92 @@
-# Phase 1 Knowledge
+# Phase 1 Knowledge Notes
 
-エージェント間で前提知識、判断理由、確認済み事項がぶれないようにするための共有メモ。
+この文書は Phase 1 実装時の補助知識、外部制約、検証メモを置く場所である。
+プロダクト仕様・実装方針・優先順位の正は `README.md` とし、この文書は source of truth ではない。
+`docs/phase1/spec.md` は README を前提にした Phase 1 詳細仕様として扱う。
 
-## 2026-04-21: agent operation rules confirmed by user
+## 1. Excel COM
 
-- 疑問がある場合は立ち止まってユーザーへ確認する。推測で進めない。
-- ユーザーへの迎合は不要。技術的・仕様的な矛盾やリスクは明確に指摘する。
-- Source of Truth は絶対に `docs/phase1/spec.md`。
-- `docs/phase1/plan.md`、`docs/phase1/task.md`、`docs/phase1/knowledge.md` は共通運用文書として扱うが、仕様判断では `docs/phase1/spec.md` を優先する。
-- 実装完了前に複数サブエージェントを並列で立ち上げてレビューさせる。
-- MainAgent はサブエージェント指摘の取りまとめと妥当性検証に徹する。
-- レビュー結果は、指摘ゼロ、棄却、起動失敗を含めて `docs/review/phase1/<milestone>.md` へ記録する。妥当な指摘へ対応する場合は、対応方針を書いてから修正する。
-- 実装完了宣言時には `docs/phase1/task.md` を更新する。
-- レビュー指摘に対応した場合は `docs/review/phase1/<milestone>.md` も更新する。
-- エージェント間で共有すべき事項は `docs/phase1/knowledge.md` に記録する。
-- 仕様として確定した事項は `docs/phase1/spec.md` に反映する。`knowledge.md` は仕様の代替ではなく、背景・判断理由・確認履歴の共有先である。
+- Excel の server-side automation は採用しない。
+- Windows Service や非対話実行での Excel automation は採用しない。
+- Phase 1 は、利用者の Windows 対話セッション上でローカル実行する。
+- Excel COM は端末依存が強いため、unit test だけで end-to-end 成功を主張しない。
+- `Range.CopyPicture`、`Shape.CopyPicture`、`Chart.Export` は live confirmation が必要である。
+- Excel process cleanup は慎重に行う。既存のユーザー Excel プロセスを無差別に kill しない。
+- `.xlsm` は読み取り専用・マクロ無効前提で扱う。macro content は抽出しない。
+
+## 2. openpyxl / OOXML
+
+- openpyxl は workbook / worksheet / cell / merged cell の基本読み取りに使う。
+- drawing、image、shape、chart の参照関係は openpyxl だけで足りない可能性があるため、raw OOXML を読む余地を残す。
+- chart、image、shape はセル本文ではなく描画オブジェクトとして扱う。
+- anchor 情報は block との近接判定に使うため、行列番号と A1 表記へ正規化する。
+- SmartArt、OLE、group shape などは Phase 1 で完全解釈しない。warning / unknown として残す。
+
+## 3. Visible-only Policy
+
+2026-04-21 のユーザー回答により、Phase 1 は「見えているものだけ」を扱う。
+
+- hidden sheet は処理しない。
+- hidden row は処理しない。
+- hidden column は処理しない。
+- filter により非表示の行は処理しない。
+
+この方針は「ユーザーが目視している Excel を意味の通る Markdown にする」ことを優先するためである。
+将来、監査用途で非表示データも追跡する要件が出た場合は別機能として扱う。
+
+## 4. Formula Policy
+
+2026-04-21 のユーザー回答により、Phase 1 では数式セルは表示値を優先する。
+
+- LLM 入力には表示値を渡す。
+- Markdown には表示値を出す。
+- 通常の `manifest.json` には数式文字列を含めない。
+- 数式文字列の debug 保存は Phase 1 必須ではない。
+
+## 5. Markdown and Assets
+
+Phase 1 の原則は「Markdown で自然に再現できるものは Markdown、再現しにくいものは画像」である。
+
+- 表は Markdown table として出す。
+- グラフは原則画像として貼る。
+- 元から画像である要素は、意味解釈に必要なら画像として貼る。
+- テキスト入り図形はテキスト抽出を優先し、見た目が意味を持つ場合は画像も貼る。
+- Range 画像はセル範囲のスクリーンショットであり、通常は LLM 補助または debug 用である。
+- 孤立した図形、画像、グラフは破棄せず、独立セクションとして扱う。
+
+## 6. LLM / Copilot SDK
+
+- LLM 実行基盤は Python ツール内部の GitHub Copilot SDK local CLI とする。
+- skill は LLM 解釈を行わない。
+- `--model` / `--vision-model` 未指定時は Copilot CLI 側の既定に任せる。
+- Copilot SDK は仕様変動リスクがあるため、依存は `llm/` 層に閉じ込める。
+- prompt construction と response contract は Python 側に置く。
+- Excel 内テキストは prompt instruction ではなく data として扱う。
+- 画像 attachment は関連する近傍画像だけに限定する。
+- LLM 応答が壊れた場合は 1 回だけ再試行する。
+- 再試行しても失敗する場合は該当 sheet を failed とし、他 sheet を継続する。
+
+## 7. Phase 1 Exclusions
+
+2026-04-21 のユーザー回答により Phase 1 では `resume` / session persistence は不要と判断した。
+
+- `resume` コマンドは実装しない。
+- `--resume` オプションは実装しない。
+- session persistence は実装しない。
+
+## 8. Test Strategy
+
+- 通常の自動テストは synthetic workbook fixture を使う。
+- private workbook、生成済み runtime logs、debug dumps、rendered assets は commit しない。
+- Copilot SDK adapter は mock で大半をテストする。
+- Excel COM rendering は live confirmation として分離する。
+- `.xlsm` macro-disabled behavior も live confirmation として扱う。
+- LLM 品質は完全自動判定しにくいため、代表 workbook での有用性確認も Phase 1 成功判定に含める。
+
+## 9. Security Notes
+
+- secrets、Copilot credentials、local connection strings を保存しない。
+- Excel 内のテキストには prompt injection が含まれうる。
+- debug JSON と logs はユーザーデータを含みうるため、既定では出力しない。
+- `SKILL.md` には変換ロジック、prompt 本体、LLM response contract を置かない。
+- skill の `allowed-tools` は最小権限にする。
