@@ -1,10 +1,29 @@
-**/bin/
-**/obj/
-.vs/
-.dotnet-home/
+# Local environment and secrets
 .env
 .env.*
 !.env.example
+.venv/
+venv/
+ENV/
+
+# Python caches and build outputs
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+dist/
+build/
+*.egg-info/
+pip-wheel-metadata/
+
+# Local test and diagnostic artifacts
 *.db
 *.db-shm
 *.db-wal
@@ -12,19 +31,7 @@
 *.log
 !tests/**/*.log
 
-# Python
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
-dist/
-build/
-*.egg-info/
-
-# Local runtime outputs from manual CLI runs
+# Phase 1 CLI runtime outputs from manual runs at the repository root
 /out/
 /outputs/
 /debug/
@@ -33,6 +40,6 @@ build/
 /manifest.json
 /result.md
 
-# Local Excel temporary lock files
+# Excel temporary lock files
 ~$*.xlsx
 ~$*.xlsm
