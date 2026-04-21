@@ -125,3 +125,12 @@ README は背景・全体像・初期構想の参考資料として扱う。
 - block ID は `s{sheet_index:03d}-b{block_index:03d}-{kind}` とする。
 - asset path は `assets/sheet-{sheet_index:03d}/...png` とし、sheet index、block id、asset kind、連番を含める。block id が同じ kind で終わる場合は kind を重複させない。
 - `SheetModel` は sheet 単位の複数 failure を表せるよう `failures: list[FailureInfo]` を持つ。
+
+## 12. phase1-block-detection 実装メモ
+
+2026-04-22 のユーザー指示により、表直上の結合セルテキストは `caption` / `heading` に分岐させず、Phase 1 では `paragraph` として扱う。
+
+- `caption` block kind は追加しない。
+- 表直上の結合セルテキストには `table_caption_candidate` warning を付けて、caption 相当候補だった事実を残す。
+- block 順は `anchor.start_row`、`anchor.start_col`、`anchor.end_row`、`anchor.end_col` の昇順で安定化する。
+- `inspect` は `phase1-block-detection` から workbook reading JSON に `blocks` を追加する。

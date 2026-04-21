@@ -236,6 +236,24 @@ def test_inspect_command_outputs_workbook_reading_json(tmp_path: Path) -> None:
     assert stderr == ""
     assert data["input_file_name"] == "inspect.xlsx"
     assert data["sheets"][0]["cells"] == [{"row": 1, "col": 1, "a1": "A1", "text": "Inspect me"}]
+    assert data["sheets"][0]["blocks"] == [
+        {
+            "id": "s001-b001-paragraph",
+            "kind": "paragraph",
+            "anchor": {
+                "sheet": "Sheet",
+                "start_row": 1,
+                "start_col": 1,
+                "end_row": 1,
+                "end_col": 1,
+                "a1": "A1",
+            },
+            "source": "cells",
+            "assets": [],
+            "warnings": [],
+            "text": "Inspect me",
+        }
+    ]
 
 
 def test_inspect_rejects_malformed_sheet_xml_without_leaking_traceback_or_locking_file(tmp_path: Path) -> None:

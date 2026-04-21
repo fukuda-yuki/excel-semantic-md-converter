@@ -97,16 +97,16 @@ Phase 1 では `resume` / session persistence を実装しない。
 
 ## 5. Block 検出
 
-- [ ] 使用範囲を推定する。
-- [ ] 空行・空列による領域分割を実装する。
-- [ ] 連続値領域から table 候補を検出する。
-- [ ] 先頭行 / 先頭列の header 候補を検出する。
-- [ ] 結合セルを取得する。
-- [ ] 表上部の結合セルを heading または caption 候補にする。
-- [ ] 表直上の単独テキスト行を heading 候補にする。
-- [ ] 表ではない説明文領域を paragraph 候補にする。
-- [ ] 過剰な意味推定を避けるため、warning を付けられるようにする。
-- [ ] `inspect` で block JSON を確認できるようにする。
+- [x] 使用範囲を推定する。
+- [x] 空行・空列による領域分割を実装する。
+- [x] 連続値領域から table 候補を検出する。
+- [x] 先頭行 / 先頭列の header 候補を検出する。
+- [x] 結合セルを取得する。
+- [x] 表上部の結合セルを paragraph 候補にし、warning を残す。
+- [x] 表直上の単独テキスト行を heading 候補にする。
+- [x] 表ではない説明文領域を paragraph 候補にする。
+- [x] 過剰な意味推定を避けるため、warning を付けられるようにする。
+- [x] `inspect` で block JSON を確認できるようにする。
 
 ## 6. OOXML / Visual Metadata
 

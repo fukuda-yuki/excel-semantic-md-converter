@@ -120,7 +120,8 @@ LLM 呼び出しは行わない。
 Excel COM レンダリングも原則行わない。
 
 `phase1-workbook-reading` 時点では、まず workbook / sheet / visible cell / merged range の読み取り結果 JSON を標準出力する。
-block / visual metadata は後続 milestone で `inspect` 出力へ追加する。
+`phase1-block-detection` では block JSON を `inspect` 出力へ追加する。
+visual metadata は後続 milestone で `inspect` 出力へ追加する。
 
 用途:
 
@@ -267,7 +268,8 @@ Phase 1 の block 検出は保守的に実装する。
 - 空行または空列で周囲と分離できる。
 - 先頭行または先頭列に header とみなせる値がある。
 
-結合セルが表の上部にある場合は caption または heading 候補にする。
+表の直上にある結合セルテキストは paragraph 候補にする。
+この場合、table caption 相当の候補であることを warning として残してよい。
 
 ### 5.3 見出し候補
 
@@ -278,6 +280,7 @@ Phase 1 の block 検出は保守的に実装する。
 - 値が少なく、周囲に空白がある強調セル。
 
 書式だけに依存した見出し判定は Phase 1 では必須にしない。
+block 順は `anchor.start_row`、`anchor.start_col`、`anchor.end_row`、`anchor.end_col` の昇順で安定化する。
 
 ### 5.4 段落候補
 

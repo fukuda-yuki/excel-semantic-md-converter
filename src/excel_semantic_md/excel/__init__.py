@@ -1,5 +1,6 @@
 """Workbook extraction layer."""
 
+from excel_semantic_md.excel.block_detector import detect_blocks
 from excel_semantic_md.excel.workbook_reader import (
     CellReadValue,
     MergedRange,
@@ -12,6 +13,7 @@ from excel_semantic_md.excel.workbook_reader import (
 
 __all__ = [
     "CellReadValue",
+    "detect_blocks",
     "MergedRange",
     "ReadFailure",
     "ReadWarning",
