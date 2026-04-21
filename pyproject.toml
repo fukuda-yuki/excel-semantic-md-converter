@@ -12,7 +12,9 @@ license = { text = "Proprietary" }
 authors = [
   { name = "excel-semantic-md contributors" },
 ]
-dependencies = []
+dependencies = [
+  "openpyxl>=3.1,<4",
+]
 
 [project.optional-dependencies]
 test = [

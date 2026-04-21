@@ -17,6 +17,9 @@
 ## 2. openpyxl / OOXML
 
 - openpyxl は workbook / worksheet / cell / merged cell の基本読み取りに使う。
+- openpyxl は数式を計算しないため、数式セルの表示値は Excel が保存した cached value を `data_only=True` で読む。
+- 数式セルに cached value が無い場合、2026-04-21 のユーザー確認により、その sheet は `formula_cached_value_missing` failure として扱う。
+- Phase 1 Workbook 読み取りでは、openpyxl で metadata と値を読むが workbook を保存しないことで入力 workbook の非変更を保証する。
 - drawing、image、shape、chart の参照関係は openpyxl だけで足りない可能性があるため、raw OOXML を読む余地を残す。
 - chart、image、shape はセル本文ではなく描画オブジェクトとして扱う。
 - anchor 情報は block との近接判定に使うため、行列番号と A1 表記へ正規化する。
@@ -42,6 +45,7 @@
 - Markdown には表示値を出す。
 - 通常の `manifest.json` には数式文字列を含めない。
 - 数式文字列の debug 保存は Phase 1 必須ではない。
+- Workbook 読み取り単独では Excel 表示値の完全再現は狙わず、number format に基づく保守的な文字列化に留める。
 
 ## 5. Markdown and Assets
 
@@ -78,6 +82,9 @@ Phase 1 では `excel-semantic-md setup` を用意する。
 - 認証情報は保存しない。
 - ユーザー workbook を開いたり変更したりしない。
 - setup 成功は end-to-end 変換成功を保証しない。
+- 2026-04-21 のユーザー確認により、出力先確認は `setup --out <dir>` として扱う。
+- `setup --out` は確認用一時ファイルを削除し、確認のために作成した空ディレクトリは可能な範囲で削除する。
+- Copilot CLI の候補は `copilot` と `gh copilot` を確認する。sign-in 確認は `gh copilot` が利用できる場合のみ `gh auth status` で確認できる範囲に留める。
 
 ## 8. Phase 1 Exclusions
 

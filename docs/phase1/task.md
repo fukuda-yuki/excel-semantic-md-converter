@@ -47,53 +47,53 @@ Phase 1 では `resume` / session persistence を実装しない。
 
 ## 3. CLI
 
-- [ ] `excel-semantic-md setup` を実装する。
-- [ ] `excel-semantic-md convert --input <path> --out <dir>` を実装する。
-- [ ] `excel-semantic-md inspect --input <path>` を実装する。
-- [ ] `excel-semantic-md render --input <path> --sheet <name>` を実装する。
-- [ ] `--model` を受け取り、未指定時は Copilot CLI 側の既定に任せる。
-- [ ] `--vision-model` を受け取り、未指定時は Copilot CLI 側の既定に任せる。
-- [ ] `--max-images-per-sheet` を受け取る。
-- [ ] `--save-debug-json` を受け取る。
-- [ ] `--save-render-artifacts` を受け取る。
-- [ ] `--strict` を受け取る。
-- [ ] `.xlsx` / `.xlsm` 以外を入力エラーにする。
-- [ ] 入力ファイルが存在しない場合に明確なエラーを返す。
-- [ ] 出力ディレクトリを作成する。
-- [ ] Phase 1 では `resume` コマンドを実装しない。
-- [ ] Phase 1 では `--resume` オプションを実装しない。
+- [x] `excel-semantic-md setup` を実装する。
+- [x] `excel-semantic-md convert --input <path> --out <dir>` を実装する。
+- [x] `excel-semantic-md inspect --input <path>` を実装する。
+- [x] `excel-semantic-md render --input <path> --sheet <name>` を実装する。
+- [x] `--model` を受け取り、未指定時は Copilot CLI 側の既定に任せる。
+- [x] `--vision-model` を受け取り、未指定時は Copilot CLI 側の既定に任せる。
+- [x] `--max-images-per-sheet` を受け取る。
+- [x] `--save-debug-json` を受け取る。
+- [x] `--save-render-artifacts` を受け取る。
+- [x] `--strict` を受け取る。
+- [x] `.xlsx` / `.xlsm` 以外を入力エラーにする。
+- [x] 入力ファイルが存在しない場合に明確なエラーを返す。
+- [x] 出力ディレクトリを作成する。
+- [x] Phase 1 では `resume` コマンドを実装しない。
+- [x] Phase 1 では `--resume` オプションを実装しない。
 
 ### 3.1 Setup
 
-- [ ] `setup` で Python package と CLI entry point を確認する。
-- [ ] `setup` で Windows 環境かどうかを確認する。
-- [ ] `setup` で Excel COM を利用できる可能性を確認する。
-- [ ] `setup` で Copilot CLI を利用できる可能性を確認する。
-- [ ] `setup` で Copilot CLI のサインイン状態を確認できる場合は確認する。
-- [ ] `setup` で skill launcher の配置先または利用方法を案内する。
-- [ ] `setup` で指定された出力先の書き込み可能性を確認する。
-- [ ] `setup` は自動的な外部インストールを行わない。
-- [ ] `setup` は認証情報を保存しない。
-- [ ] `setup` はユーザー workbook を開いたり変更したりしない。
-- [ ] `setup` の結果を、人間が読める診断レポートとして出力する。
+- [x] `setup` で Python package と CLI entry point を確認する。
+- [x] `setup` で Windows 環境かどうかを確認する。
+- [x] `setup` で Excel COM を利用できる可能性を確認する。
+- [x] `setup` で Copilot CLI を利用できる可能性を確認する。
+- [x] `setup` で Copilot CLI のサインイン状態を確認できる場合は確認する。
+- [x] `setup` で skill launcher の配置先または利用方法を案内する。
+- [x] `setup` で指定された出力先の書き込み可能性を確認する。
+- [x] `setup` は自動的な外部インストールを行わない。
+- [x] `setup` は認証情報を保存しない。
+- [x] `setup` はユーザー workbook を開いたり変更したりしない。
+- [x] `setup` の結果を、人間が読める診断レポートとして出力する。
 
 ## 4. Workbook 読み取り
 
-- [ ] openpyxl による workbook 読み取りを実装する。
-- [ ] `.xlsm` を読み取り専用・マクロ無効前提で扱う。
-- [ ] workbook を保存しないことを保証する。
-- [ ] sheet 順を保持する。
-- [ ] hidden sheet を除外する。
-- [ ] hidden row を除外する。
-- [ ] hidden column を除外する。
-- [ ] filter で非表示の行を除外する。
-- [ ] 数式セルは表示値を採用する。
-- [ ] 数式文字列を通常 manifest / LLM input に含めない。
-- [ ] cell comment を Phase 1 対象外として無視する。
-- [ ] note を Phase 1 対象外として無視する。
-- [ ] hyperlink を Phase 1 対象外として無視する。
-- [ ] セル内改行を保持する。
-- [ ] Excel 表示値を優先して日付・数値・パーセンテージを扱う。
+- [x] openpyxl による workbook 読み取りを実装する。
+- [x] `.xlsm` を読み取り専用・マクロ無効前提で扱う。
+- [x] workbook を保存しないことを保証する。
+- [x] sheet 順を保持する。
+- [x] hidden sheet を除外する。
+- [x] hidden row を除外する。
+- [x] hidden column を除外する。
+- [x] filter で非表示の行を除外する。
+- [x] 数式セルは表示値を採用する。
+- [x] 数式文字列を通常 manifest / LLM input に含めない。
+- [x] cell comment を Phase 1 対象外として無視する。
+- [x] note を Phase 1 対象外として無視する。
+- [x] hyperlink を Phase 1 対象外として無視する。
+- [x] セル内改行を保持する。
+- [x] Excel 表示値を優先して日付・数値・パーセンテージを扱う。
 
 ## 5. Block 検出
 
@@ -231,17 +231,17 @@ Phase 1 では `resume` / session persistence を実装しない。
 
 ## 13. Fixture / Test
 
-- [ ] table only workbook fixture を作成する。
+- [x] table only workbook fixture を作成する。
 - [ ] table + text shape workbook fixture を作成する。
 - [ ] table + image workbook fixture を作成する。
 - [ ] table + chart workbook fixture を作成する。
-- [ ] multi-sheet workbook fixture を作成する。
-- [ ] hidden row / column / sheet workbook fixture を作成する。
-- [ ] formula display value workbook fixture を作成する。
-- [ ] workbook reading test を書く。
-- [ ] visible-only filtering test を書く。
-- [ ] formula display value test を書く。
-- [ ] merged cell handling test を書く。
+- [x] multi-sheet workbook fixture を作成する。
+- [x] hidden row / column / sheet workbook fixture を作成する。
+- [x] formula display value workbook fixture を作成する。
+- [x] workbook reading test を書く。
+- [x] visible-only filtering test を書く。
+- [x] formula display value test を書く。
+- [x] merged cell handling test を書く。
 - [ ] table detection test を書く。
 - [ ] block ID stability test を書く。
 - [ ] OOXML visual metadata extraction test を書く。
@@ -255,7 +255,7 @@ Phase 1 では `resume` / session persistence を実装しない。
 ## 14. Validation
 
 - [x] `python -m pip install -e .` で local install できることを確認する。
-- [ ] `excel-semantic-md inspect --input <fixture>` を実行する。
+- [x] `excel-semantic-md inspect --input <fixture>` を実行する。
 - [ ] `excel-semantic-md setup` を実行する。
 - [ ] `excel-semantic-md convert --input <fixture> --out <out>` を実行する。
 - [ ] `result.md` が生成されることを確認する。
