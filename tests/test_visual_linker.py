@@ -107,6 +107,65 @@ def test_links_visual_to_heading_scope_until_next_heading() -> None:
     assert blocks[1]["visual_id"] == "s001-v001-image"
 
 
+def test_links_visual_to_heading_scope_after_intermediate_block() -> None:
+    block_model = WorkbookModel(
+        sheets=[
+            SheetModel(
+                sheet_index=1,
+                name="ScopeLate",
+                blocks=[
+                    HeadingBlock(
+                        id="pending",
+                        anchor=Rect(sheet="ScopeLate", start_row=1, start_col=1, end_row=1, end_col=1, a1="A1"),
+                        source=SourceKind.CELLS,
+                        text="Overview",
+                        level=1,
+                    ),
+                    ParagraphBlock(
+                        id="pending",
+                        anchor=Rect(sheet="ScopeLate", start_row=4, start_col=1, end_row=4, end_col=1, a1="A4"),
+                        source=SourceKind.CELLS,
+                        text="Body block",
+                    ),
+                    HeadingBlock(
+                        id="pending",
+                        anchor=Rect(sheet="ScopeLate", start_row=10, start_col=1, end_row=10, end_col=1, a1="A10"),
+                        source=SourceKind.CELLS,
+                        text="Next",
+                        level=1,
+                    ),
+                ],
+            )
+        ]
+    )
+    visual_results = [
+        SheetVisualResult(
+            sheet_index=1,
+            name="ScopeLate",
+            visuals=[
+                VisualElement(
+                    id="s001-v001-image",
+                    kind="image",
+                    anchor=VisualAnchor(
+                        anchor_type="oneCellAnchor",
+                        from_point=VisualAnchorPoint(row=8, col=4),
+                        a1="D8",
+                    ),
+                    source=VisualSource(drawing_part="xl/drawings/drawing1.xml"),
+                    asset_candidate=AssetCandidate(kind="image"),
+                    alt_text="Late scoped visual",
+                )
+            ],
+        )
+    ]
+
+    linked = link_visuals(block_model, visual_results)
+    blocks = [block.to_dict() for block in linked.sheets[0].blocks]
+
+    assert [block["kind"] for block in blocks] == ["heading", "paragraph", "image", "heading"]
+    assert blocks[2]["related_block_id"] == "s001-b001-heading"
+
+
 def test_assigns_synthetic_anchor_and_warning_for_absolute_anchor_visual() -> None:
     block_model = WorkbookModel(
         sheets=[
@@ -148,6 +207,61 @@ def test_assigns_synthetic_anchor_and_warning_for_absolute_anchor_visual() -> No
     assert blocks[1]["anchor"]["a1"] == "A2"
     assert blocks[1]["related_block_id"] is None
     assert [warning["code"] for warning in blocks[1]["warnings"]] == ["visual_anchor_not_cell_addressable"]
+
+
+def test_places_synthetic_anchor_after_lower_real_visuals() -> None:
+    block_model = WorkbookModel(
+        sheets=[
+            SheetModel(
+                sheet_index=1,
+                name="SyntheticOrder",
+                blocks=[
+                    ParagraphBlock(
+                        id="pending",
+                        anchor=Rect(sheet="SyntheticOrder", start_row=1, start_col=1, end_row=1, end_col=1, a1="A1"),
+                        source=SourceKind.CELLS,
+                        text="Top",
+                    )
+                ],
+            )
+        ]
+    )
+    visual_results = [
+        SheetVisualResult(
+            sheet_index=1,
+            name="SyntheticOrder",
+            visuals=[
+                VisualElement(
+                    id="s001-v001-image",
+                    kind="image",
+                    anchor=VisualAnchor(
+                        anchor_type="oneCellAnchor",
+                        from_point=VisualAnchorPoint(row=20, col=4),
+                        a1="D20",
+                    ),
+                    source=VisualSource(drawing_part="xl/drawings/drawing1.xml"),
+                    asset_candidate=AssetCandidate(kind="image"),
+                    alt_text="Lower real visual",
+                ),
+                VisualElement(
+                    id="s001-v002-image",
+                    kind="image",
+                    anchor=VisualAnchor(anchor_type="absoluteAnchor"),
+                    source=VisualSource(drawing_part="xl/drawings/drawing1.xml"),
+                    asset_candidate=AssetCandidate(kind="image"),
+                    alt_text="Synthetic visual",
+                ),
+            ],
+        )
+    ]
+
+    linked = link_visuals(block_model, visual_results)
+    blocks = [block.to_dict() for block in linked.sheets[0].blocks]
+
+    assert [block["kind"] for block in blocks] == ["paragraph", "image", "image"]
+    assert blocks[1]["anchor"]["a1"] == "D20"
+    assert blocks[2]["anchor"]["a1"] == "A21"
+    assert blocks[2]["related_block_id"] is None
 
 
 def test_chooses_nearest_block_when_no_adjacent_or_heading_scope_match() -> None:
@@ -206,6 +320,80 @@ def test_ignores_unknown_visual_when_building_blocks() -> None:
     blocks = [block.to_dict() for block in linked.sheets[0].blocks]
 
     assert [block["visual_id"] for block in blocks if block["visual_id"] is not None] == ["s001-v001-shape"]
+
+
+def test_link_visuals_does_not_mutate_input_block_model() -> None:
+    block_model = WorkbookModel(
+        sheets=[
+            SheetModel(
+                sheet_index=1,
+                name="Immutable",
+                blocks=[
+                    ParagraphBlock(
+                        id="pending",
+                        anchor=Rect(sheet="Immutable", start_row=1, start_col=1, end_row=1, end_col=1, a1="A1"),
+                        source=SourceKind.CELLS,
+                        text="Original",
+                    )
+                ],
+            )
+        ]
+    )
+    original = block_model.to_dict()
+    visual_results = [
+        SheetVisualResult(
+            sheet_index=1,
+            name="Immutable",
+            visuals=[
+                VisualElement(
+                    id="s001-v001-image",
+                    kind="image",
+                    anchor=VisualAnchor(
+                        anchor_type="oneCellAnchor",
+                        from_point=VisualAnchorPoint(row=2, col=4),
+                        a1="D2",
+                    ),
+                    source=VisualSource(drawing_part="xl/drawings/drawing1.xml"),
+                    asset_candidate=AssetCandidate(kind="image"),
+                    alt_text="Linked visual",
+                )
+            ],
+        )
+    ]
+
+    _linked = link_visuals(block_model, visual_results)
+
+    assert block_model.to_dict() == original
+
+
+def test_normalizes_visual_block_a1_from_numeric_anchor_bounds() -> None:
+    block_model = WorkbookModel(sheets=[SheetModel(sheet_index=1, name="Normalize", blocks=[])])
+    visual_results = [
+        SheetVisualResult(
+            sheet_index=1,
+            name="Normalize",
+            visuals=[
+                VisualElement(
+                    id="s001-v001-image",
+                    kind="image",
+                    anchor=VisualAnchor(
+                        anchor_type="twoCellAnchor",
+                        from_point=VisualAnchorPoint(row=3, col=3),
+                        to_point=VisualAnchorPoint(row=5, col=4),
+                        a1="z99",
+                    ),
+                    source=VisualSource(drawing_part="xl/drawings/drawing1.xml"),
+                    asset_candidate=AssetCandidate(kind="image"),
+                    alt_text="Normalized visual",
+                )
+            ],
+        )
+    ]
+
+    linked = link_visuals(block_model, visual_results)
+    blocks = [block.to_dict() for block in linked.sheets[0].blocks]
+
+    assert blocks[0]["anchor"]["a1"] == "C3:D5"
 
 
 def _linked_workbook(name: str) -> WorkbookModel:

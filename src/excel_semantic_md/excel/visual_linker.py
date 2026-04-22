@@ -23,8 +23,8 @@ from excel_semantic_md.models import (
 @dataclass(frozen=True)
 class _HeadingScope:
     heading: HeadingBlock
-    start_index: int
-    end_index: int | None = None
+    start_row_exclusive: int
+    end_row_exclusive: int | None = None
 
 
 _SOURCE_ORDER = {
@@ -51,19 +51,29 @@ def link_visuals(block_model: WorkbookModel, visual_results: list[SheetVisualRes
 
 
 def _link_sheet_visuals(sheet: SheetModel, visual_result: SheetVisualResult | None) -> SheetModel:
+    cloned_blocks = [_clone_block(block) for block in sheet.blocks]
     if visual_result is None:
         return SheetModel(
             sheet_index=sheet.sheet_index,
             name=sheet.name,
-            blocks=list(sheet.blocks),
+            blocks=cloned_blocks,
             failures=list(sheet.failures),
             warnings=list(sheet.warnings),
         )
 
-    combined_blocks = list(sheet.blocks)
-    cell_blocks = [block for block in sheet.blocks if block.source == SourceKind.CELLS]
+    combined_blocks = list(cloned_blocks)
+    cell_blocks = [block for block in cloned_blocks if block.source == SourceKind.CELLS]
     heading_scopes = _heading_scopes(cell_blocks)
-    next_fallback_row = max((block.anchor.end_row for block in sheet.blocks), default=0) + 1
+    max_addressable_row = max(
+        [block.anchor.end_row for block in cloned_blocks]
+        + [
+            rect.end_row
+            for rect in (_visual_anchor_rect(visual, sheet.name) for visual in visual_result.visuals)
+            if rect is not None
+        ],
+        default=0,
+    )
+    next_fallback_row = max_addressable_row + 1
     related_targets_by_visual_block: dict[int, int] = {}
 
     for visual in visual_result.visuals:
@@ -120,9 +130,15 @@ def _heading_scopes(blocks: list[Block]) -> list[_HeadingScope]:
         if isinstance(block, HeadingBlock)
     ]
     scopes: list[_HeadingScope] = []
-    for offset, (index, block) in enumerate(heading_positions):
-        next_index = heading_positions[offset + 1][0] if offset + 1 < len(heading_positions) else None
-        scopes.append(_HeadingScope(heading=block, start_index=index, end_index=next_index))
+    for offset, (_index, block) in enumerate(heading_positions):
+        next_row = heading_positions[offset + 1][1].anchor.start_row if offset + 1 < len(heading_positions) else None
+        scopes.append(
+            _HeadingScope(
+                heading=block,
+                start_row_exclusive=block.anchor.end_row,
+                end_row_exclusive=next_row,
+            )
+        )
     return scopes
 
 
@@ -139,7 +155,7 @@ def _resolve_related_block(
     if adjacent:
         return min(adjacent, key=lambda block: (_rect_distance(anchor_rect, block.anchor), _sort_key(block)))
 
-    heading_match = _heading_scope_match(anchor_rect, ordered_blocks, heading_scopes)
+    heading_match = _heading_scope_match(anchor_rect, heading_scopes)
     if heading_match is not None:
         return heading_match
 
@@ -148,24 +164,15 @@ def _resolve_related_block(
 
 def _heading_scope_match(
     anchor_rect: Rect,
-    ordered_blocks: list[Block],
     heading_scopes: list[_HeadingScope],
 ) -> HeadingBlock | None:
-    anchor_index = _block_insertion_index(anchor_rect, ordered_blocks)
     for scope in heading_scopes:
-        if anchor_index <= scope.start_index:
+        if anchor_rect.start_row <= scope.start_row_exclusive:
             continue
-        if scope.end_index is not None and anchor_index >= scope.end_index:
+        if scope.end_row_exclusive is not None and anchor_rect.start_row >= scope.end_row_exclusive:
             continue
         return scope.heading
     return None
-
-
-def _block_insertion_index(anchor_rect: Rect, ordered_blocks: list[Block]) -> int:
-    for index, block in enumerate(ordered_blocks):
-        if _rect_sort_key(anchor_rect) < _rect_sort_key(block.anchor):
-            return index
-    return len(ordered_blocks)
 
 
 def _visual_anchor_rect(visual: VisualElement, sheet_name: str) -> Rect | None:
@@ -193,7 +200,7 @@ def _visual_anchor_rect(visual: VisualElement, sheet_name: str) -> Rect | None:
         start_col=start_col,
         end_row=end_row,
         end_col=end_col,
-        a1=visual.anchor.a1 or _rect_a1(start_row, start_col, end_row, end_col),
+        a1=_rect_a1(start_row, start_col, end_row, end_col),
     )
 
 
@@ -243,6 +250,10 @@ def _warning_from_read_warning(warning: object) -> WarningInfo:
     message = getattr(warning, "message")
     details = dict(getattr(warning, "details", {}))
     return WarningInfo(code=code, message=message, details=details)
+
+
+def _clone_block(block: Block) -> Block:
+    return Block.from_dict(block.to_dict())
 
 
 def _sort_key(block: Block) -> tuple[int, int, int, int, int, str]:

@@ -158,3 +158,6 @@ README は背景・全体像・初期構想の参考資料として扱う。
 - `absoluteAnchor` など cell rect を作れない visual は `visual_anchor_not_cell_addressable` warning を付けた standalone block にし、sheet 既存 block の末尾行の次へ synthetic anchor を置く。
 - final block order は anchor 順で再ソートし、visual-origin block を含めて block ID を再採番する。
 - `manifest.json` writer は未実装のままなので、この milestone では block schema を先に確定し、後続実装が `visual_id` / `related_block_id` をそのまま writer に流用できる状態までを担当する。
+- subagent review の指摘を受け、heading scope は insertion index ではなく row range で判定するよう修正した。具体的には「heading の `anchor.end_row` より下、次の heading の `anchor.start_row` より上」を scope として扱う。
+- synthetic anchor の fallback row は cell block だけでなく addressable visual anchor も含めた sheet 最大行の次を使う。
+- `link_visuals()` は入力 `WorkbookModel` を破壊的に変更しないよう、入力 block を clone してから再採番する。
