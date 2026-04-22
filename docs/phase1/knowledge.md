@@ -145,3 +145,16 @@ README は背景・全体像・初期構想の参考資料として扱う。
 - anchor の `row` / `col` は 1-based で出す。`absoluteAnchor` では `a1` を出さない。
 - `asset_candidate` は最終 asset path ではなく、OOXML 上の `source_part` / `extension` / `content_type` を保持する。
 - static fixture は `tests/fixtures/visuals/` に置き、image / chart / shape / unknown / broken drawing rel / `.xlsm` を synthetic workbook として管理する。
+
+## 14. phase1-visual-linking 実装メモ
+
+2026-04-22 の `phase1-visual-linking` では、`inspect` の `blocks` を post-linking 状態へ更新した。
+
+- block 共通フィールドに `visual_id` と `related_block_id` を追加した。cell-based block では両方 `null` とする。
+- shape / image / chart は linked / unlinked を問わず visual-origin block 化する。`unknown` visual は引き続き `visuals` と warning に残し、block 化しない。
+- link 判定順は `overlap/adjacent -> heading scope -> nearest block -> standalone` とする。
+- heading scope は「その heading block から次の heading block 手前まで」として扱う。
+- `oneCellAnchor` は 1x1 rect、`twoCellAnchor` は from / to を含む rect に正規化する。
+- `absoluteAnchor` など cell rect を作れない visual は `visual_anchor_not_cell_addressable` warning を付けた standalone block にし、sheet 既存 block の末尾行の次へ synthetic anchor を置く。
+- final block order は anchor 順で再ソートし、visual-origin block を含めて block ID を再採番する。
+- `manifest.json` writer は未実装のままなので、この milestone では block schema を先に確定し、後続実装が `visual_id` / `related_block_id` をそのまま writer に流用できる状態までを担当する。

@@ -187,7 +187,7 @@ def test_inspect_includes_visuals_and_visual_warnings() -> None:
     ]
 
 
-def test_inspect_includes_visual_metadata_without_changing_existing_blocks() -> None:
+def test_inspect_includes_visual_metadata_and_linked_visual_blocks() -> None:
     code, stdout, stderr = _run_cli(["inspect", "--input", str(FIXTURES / "image-visual.xlsx")])
 
     payload = json.loads(stdout)
@@ -207,9 +207,29 @@ def test_inspect_includes_visual_metadata_without_changing_existing_blocks() -> 
                 "a1": "A1",
             },
             "source": "cells",
+            "visual_id": None,
+            "related_block_id": None,
             "assets": [],
             "warnings": [],
             "text": "Image fixture",
+        },
+        {
+            "id": "s001-b002-image",
+            "kind": "image",
+            "anchor": {
+                "sheet": "Image",
+                "start_row": 2,
+                "start_col": 4,
+                "end_row": 2,
+                "end_col": 4,
+                "a1": "D2",
+            },
+            "source": "image",
+            "visual_id": "s001-v001-image",
+            "related_block_id": "s001-b001-paragraph",
+            "assets": [],
+            "warnings": [],
+            "alt_text": "Company logo",
         }
     ]
     assert payload["sheets"][0]["visuals"] == [

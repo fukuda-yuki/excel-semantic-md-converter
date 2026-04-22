@@ -122,14 +122,14 @@ Phase 1 では `resume` / session persistence を実装しない。
 
 ## 7. 視覚要素の紐付け
 
-- [ ] shape / image / chart と block の近接判定を実装する。
-- [ ] table と隣接 shape を紐付ける。
-- [ ] table と隣接 image を紐付ける。
-- [ ] table と隣接 chart を紐付ける。
-- [ ] heading 配下の visual を該当セクションに紐付ける。
-- [ ] 紐付かない shape を独立 block にする。
-- [ ] 紐付かない image を独立 block にする。
-- [ ] 紐付かない chart を独立 block にする。
+- [x] shape / image / chart と block の近接判定を実装する。
+- [x] table と隣接 shape を紐付ける。
+- [x] table と隣接 image を紐付ける。
+- [x] table と隣接 chart を紐付ける。
+- [x] heading 配下の visual を該当セクションに紐付ける。
+- [x] 紐付かない shape を独立 block にする。
+- [x] 紐付かない image を独立 block にする。
+- [x] 紐付かない chart を独立 block にする。
 - [ ] 紐付け結果を manifest に残す。
 
 ## 8. Excel COM レンダリング
@@ -232,8 +232,8 @@ Phase 1 では `resume` / session persistence を実装しない。
 ## 13. Fixture / Test
 
 - [x] table only workbook fixture を作成する。
-- [ ] table + text shape workbook fixture を作成する。
-- [ ] table + image workbook fixture を作成する。
+- [x] table + text shape workbook fixture を作成する。
+- [x] table + image workbook fixture を作成する。
 - [x] table + chart workbook fixture を作成する。
 - [x] multi-sheet workbook fixture を作成する。
 - [x] hidden row / column / sheet workbook fixture を作成する。
@@ -242,10 +242,10 @@ Phase 1 では `resume` / session persistence を実装しない。
 - [x] visible-only filtering test を書く。
 - [x] formula display value test を書く。
 - [x] merged cell handling test を書く。
-- [ ] table detection test を書く。
-- [ ] block ID stability test を書く。
+- [x] table detection test を書く。
+- [x] block ID stability test を書く。
 - [x] OOXML visual metadata extraction test を書く。
-- [ ] visual linking test を書く。
+- [x] visual linking test を書く。
 - [ ] manifest generation test を書く。
 - [ ] Markdown output composition test を書く。
 - [ ] LLM response parser retry test を書く。

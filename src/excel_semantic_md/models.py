@@ -227,6 +227,8 @@ class Block:
     id: str
     anchor: Rect
     source: SourceKind
+    visual_id: str | None = None
+    related_block_id: str | None = None
     assets: list[AssetRef] = field(default_factory=list)
     warnings: list[WarningInfo] = field(default_factory=list)
 
@@ -265,6 +267,8 @@ class Block:
             "id": data["id"],
             "anchor": Rect.from_dict(data["anchor"]),
             "source": SourceKind(data["source"]),
+            "visual_id": data.get("visual_id"),
+            "related_block_id": data.get("related_block_id"),
             "assets": [AssetRef.from_dict(item) for item in data.get("assets", [])],
             "warnings": [WarningInfo.from_dict(item) for item in data.get("warnings", [])],
         }
@@ -275,6 +279,8 @@ class Block:
             "kind": self.kind.value,
             "anchor": self.anchor.to_dict(),
             "source": self.source.value,
+            "visual_id": self.visual_id,
+            "related_block_id": self.related_block_id,
             "assets": [asset.to_dict() for asset in self.assets],
             "warnings": [warning.to_dict() for warning in self.warnings],
         }

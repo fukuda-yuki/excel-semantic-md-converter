@@ -73,6 +73,8 @@ def test_table_block_round_trip_uses_snake_case_and_enum_values():
 
     assert data["kind"] == "table"
     assert data["source"] == "cells"
+    assert data["visual_id"] is None
+    assert data["related_block_id"] is None
     assert "header_rows" in data
     assert "headerRows" not in json.dumps(data)
     assert Block.from_dict(data) == block
@@ -83,6 +85,8 @@ def test_shape_block_round_trip_with_asset_ref():
         id="s001-b002-shape",
         anchor=Rect(sheet="Sheet1", start_row=4, start_col=1, end_row=6, end_col=3, a1="A4:C6"),
         source=SourceKind.SHAPE,
+        visual_id="s001-v001-shape",
+        related_block_id="s001-b001-table",
         text="Important note",
         shape_type="text_box",
         assets=[
@@ -99,6 +103,8 @@ def test_shape_block_round_trip_with_asset_ref():
 
     assert data["assets"][0]["kind"] == "shape"
     assert data["assets"][0]["role"] == "markdown"
+    assert data["visual_id"] == "s001-v001-shape"
+    assert data["related_block_id"] == "s001-b001-table"
     assert Block.from_dict(data) == block
 
 

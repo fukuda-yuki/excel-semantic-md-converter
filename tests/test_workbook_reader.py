@@ -249,6 +249,8 @@ def test_inspect_command_outputs_workbook_reading_json(tmp_path: Path) -> None:
                 "a1": "A1",
             },
             "source": "cells",
+            "visual_id": None,
+            "related_block_id": None,
             "assets": [],
             "warnings": [],
             "text": "Inspect me",
