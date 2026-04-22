@@ -110,15 +110,15 @@ Phase 1 では `resume` / session persistence を実装しない。
 
 ## 6. OOXML / Visual Metadata
 
-- [ ] `.xlsx` / `.xlsm` を zip として読み、drawing relationship を取得する。
-- [ ] image 参照を取得する。
-- [ ] shape metadata を取得する。
-- [ ] chart metadata を取得する。
-- [ ] anchor / position を取得する。
-- [ ] openpyxl で取得できない情報を raw OOXML で補う。
-- [ ] SmartArt / OLE / group shape など未対応要素を warning または unknown として残す。
-- [ ] workbook 内画像を asset 候補として抽出する。
-- [ ] visual metadata を `inspect` 出力に含める。
+- [x] `.xlsx` / `.xlsm` を zip として読み、drawing relationship を取得する。
+- [x] image 参照を取得する。
+- [x] shape metadata を取得する。
+- [x] chart metadata を取得する。
+- [x] anchor / position を取得する。
+- [x] openpyxl で取得できない情報を raw OOXML で補う。
+- [x] SmartArt / OLE / group shape など未対応要素を warning または unknown として残す。
+- [x] workbook 内画像を asset 候補として抽出する。
+- [x] visual metadata を `inspect` 出力に含める。
 
 ## 7. 視覚要素の紐付け
 
@@ -234,7 +234,7 @@ Phase 1 では `resume` / session persistence を実装しない。
 - [x] table only workbook fixture を作成する。
 - [ ] table + text shape workbook fixture を作成する。
 - [ ] table + image workbook fixture を作成する。
-- [ ] table + chart workbook fixture を作成する。
+- [x] table + chart workbook fixture を作成する。
 - [x] multi-sheet workbook fixture を作成する。
 - [x] hidden row / column / sheet workbook fixture を作成する。
 - [x] formula display value workbook fixture を作成する。
@@ -244,7 +244,7 @@ Phase 1 では `resume` / session persistence を実装しない。
 - [x] merged cell handling test を書く。
 - [ ] table detection test を書く。
 - [ ] block ID stability test を書く。
-- [ ] OOXML visual metadata extraction test を書く。
+- [x] OOXML visual metadata extraction test を書く。
 - [ ] visual linking test を書く。
 - [ ] manifest generation test を書く。
 - [ ] Markdown output composition test を書く。

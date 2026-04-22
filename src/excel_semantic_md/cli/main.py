@@ -235,17 +235,20 @@ def _handle_convert(args: argparse.Namespace, parser: argparse.ArgumentParser) -
 
 def _handle_inspect(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     input_path = _validate_input_workbook(parser, args.input)
-    from excel_semantic_md.excel import detect_blocks, read_workbook
+    from excel_semantic_md.excel import detect_blocks, read_visual_metadata, read_workbook
     from openpyxl.utils.exceptions import InvalidFileException
 
     try:
         result = read_workbook(input_path)
         block_model = detect_blocks(result)
+        visual_model = read_visual_metadata(input_path)
     except (OSError, InvalidFileException, zipfile.BadZipFile, ElementTree.ParseError, KeyError, ValueError) as exc:
         parser.error(f"failed to read input workbook: {args.input}: {exc}")
     payload = result.to_dict()
-    for sheet_payload, block_sheet in zip(payload["sheets"], block_model.sheets, strict=True):
+    for sheet_payload, block_sheet, visual_sheet in zip(payload["sheets"], block_model.sheets, visual_model, strict=True):
         sheet_payload["blocks"] = [block.to_dict() for block in block_sheet.blocks]
+        sheet_payload["visuals"] = [visual.to_dict() for visual in visual_sheet.visuals]
+        sheet_payload["warnings"].extend(warning.to_dict() for warning in visual_sheet.warnings)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return SUCCESS_EXIT_CODE
 

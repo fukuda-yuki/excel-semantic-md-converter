@@ -134,3 +134,14 @@ README は背景・全体像・初期構想の参考資料として扱う。
 - 表直上の結合セルテキストには `table_caption_candidate` warning を付けて、caption 相当候補だった事実を残す。
 - block 順は `anchor.start_row`、`anchor.start_col`、`anchor.end_row`、`anchor.end_col` の昇順で安定化する。
 - `inspect` は `phase1-block-detection` から workbook reading JSON に `blocks` を追加する。
+
+## 13. phase1-ooxml-visual-metadata 実装メモ
+
+2026-04-22 の `phase1-ooxml-visual-metadata` では、OOXML visual metadata を workbook 読み取り層から分離した raw OOXML reader として追加した。
+
+- `inspect` は各 sheet に `visuals` 配列を追加する。visual がない sheet でも `[]` を出す。
+- drawing 由来の補足失敗は sheet `warnings` または visual `warnings` に残し、workbook / worksheet の主要 XML 破損だけを CLI error にする。
+- visual ID は `s{sheet_index:03d}-v{visual_index:03d}-{kind}` とする。
+- anchor の `row` / `col` は 1-based で出す。`absoluteAnchor` では `a1` を出さない。
+- `asset_candidate` は最終 asset path ではなく、OOXML 上の `source_part` / `extension` / `content_type` を保持する。
+- static fixture は `tests/fixtures/visuals/` に置き、image / chart / shape / unknown / broken drawing rel / `.xlsm` を synthetic workbook として管理する。

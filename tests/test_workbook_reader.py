@@ -254,6 +254,7 @@ def test_inspect_command_outputs_workbook_reading_json(tmp_path: Path) -> None:
             "text": "Inspect me",
         }
     ]
+    assert data["sheets"][0]["visuals"] == []
 
 
 def test_inspect_rejects_malformed_sheet_xml_without_leaking_traceback_or_locking_file(tmp_path: Path) -> None:
