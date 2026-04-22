@@ -161,3 +161,14 @@ README は背景・全体像・初期構想の参考資料として扱う。
 - subagent review の指摘を受け、heading scope は insertion index ではなく row range で判定するよう修正した。具体的には「heading の `anchor.end_row` より下、次の heading の `anchor.start_row` より上」を scope として扱う。
 - synthetic anchor の fallback row は cell block だけでなく addressable visual anchor も含めた sheet 最大行の次を使う。
 - `link_visuals()` は入力 `WorkbookModel` を破壊的に変更しないよう、入力 block を clone してから再採番する。
+
+## 15. phase1-excel-com-rendering 実装メモ
+
+2026-04-22 の `phase1-excel-com-rendering` では、`render` を Excel COM live confirmation 用コマンドとして実装した。
+
+- `render` は `--out` を増やさず、一時ディレクトリへ確認用成果物を書き、標準出力 JSON で `temp_dir` と artifact 一覧を返す。
+- `render` は workbook 読み取り、block 検出、OOXML visual metadata、visual linking、render planning、Excel COM rendering までを実行するが、LLM は呼ばない。
+- Excel COM が使えない環境や object matching 失敗では、可能な範囲で JSON `failures` を返し、live confirmation 不足を明示する。
+- image block は `Shape.CopyPicture` による確認用画像に加え、OOXML の元画像 part が取得できる場合は original asset も確認用成果物として複製する。
+- internal render planner は `save_render_artifacts` を受け取り、将来 `convert --save-render-artifacts` から補助 Range 画像を要求できる形にした。
+- shape / image / chart の Excel COM object matching は、まず anchor rect の exact match、その後 nearest match とし、shape text / alt text / chart title は曖昧性解消の補助ヒントに使う。

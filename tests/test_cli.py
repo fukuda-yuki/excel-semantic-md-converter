@@ -197,7 +197,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(stdout, "")
         self.assertIn("failed to read input workbook", stderr)
 
-    def test_render_validates_input_and_sheet_then_fails_as_unimplemented(self) -> None:
+    def test_render_rejects_invalid_workbook_content(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             input_path = Path(temp_dir) / "sample.xlsx"
             input_path.write_bytes(b"synthetic workbook placeholder")
@@ -206,9 +206,9 @@ class CliTests(unittest.TestCase):
                 ["render", "--input", str(input_path), "--sheet", "Sheet1"]
             )
 
-        self.assertEqual(code, 1)
-        self.assertEqual(stderr, "")
-        self.assertIn("not implemented", stdout)
+        self.assertEqual(code, 2)
+        self.assertEqual(stdout, "")
+        self.assertIn("failed to read input workbook", stderr)
 
     def test_render_rejects_empty_sheet_name(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

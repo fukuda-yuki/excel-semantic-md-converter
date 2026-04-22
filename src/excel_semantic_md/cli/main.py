@@ -255,9 +255,48 @@ def _handle_inspect(args: argparse.Namespace, parser: argparse.ArgumentParser) -
 
 
 def _handle_render(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
-    _validate_input_workbook(parser, args.input)
-    _validate_sheet_name(parser, args.sheet)
-    return _print_not_implemented("render")
+    input_path = _validate_input_workbook(parser, args.input)
+    sheet_name = _validate_sheet_name(parser, args.sheet)
+    from excel_semantic_md.excel import detect_blocks, link_visuals, read_visual_metadata, read_workbook
+    from excel_semantic_md.render import build_render_plan, render_with_excel_com
+    from openpyxl.utils.exceptions import InvalidFileException
+
+    try:
+        workbook_read = read_workbook(input_path)
+        block_model = detect_blocks(workbook_read)
+        visual_model = read_visual_metadata(input_path)
+        linked_model = link_visuals(block_model, visual_model)
+    except (OSError, InvalidFileException, zipfile.BadZipFile, ElementTree.ParseError, KeyError, ValueError) as exc:
+        parser.error(f"failed to read input workbook: {args.input}: {exc}")
+
+    sheet_by_name = {sheet.name: sheet for sheet in linked_model.sheets}
+    if sheet_name not in sheet_by_name:
+        parser.error(f"sheet was not found among visible workbook sheets: {sheet_name}")
+
+    linked_sheet = sheet_by_name[sheet_name]
+    visual_sheet = next((sheet for sheet in visual_model if sheet.name == sheet_name), None)
+    warnings = list(linked_sheet.warnings)
+    if visual_sheet is not None:
+        warnings.extend(visual_sheet.warnings)
+    for block in linked_sheet.blocks:
+        warnings.extend(block.warnings)
+
+    plan_items, plan_warnings, plan_failures = build_render_plan(
+        linked_sheet,
+        visual_sheet,
+        save_render_artifacts=False,
+    )
+    warnings.extend(plan_warnings)
+    result = render_with_excel_com(
+        input_path,
+        input_file_name=workbook_read.input_file_name,
+        sheet_name=sheet_name,
+        plan_items=plan_items,
+        warnings=warnings,
+        failures=[*linked_sheet.failures, *plan_failures],
+    )
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
+    return SUCCESS_EXIT_CODE if not result.failures else NOT_IMPLEMENTED_EXIT_CODE
 
 
 def _add_input_option(parser: argparse.ArgumentParser) -> None:

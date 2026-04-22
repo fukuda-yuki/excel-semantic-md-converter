@@ -139,6 +139,16 @@ excel-semantic-md render --input "C:\work\sample.xlsx" --sheet "要件一覧"
 指定 sheet のレンダリング計画を作り、Excel COM で画像化できることを確認する。
 LLM 呼び出しは行わない。
 
+出力契約:
+
+- 一時ディレクトリを作成し、render で生成した確認用画像を保存する。
+- 標準出力は JSON とし、少なくとも `input_file_name`、`sheet_name`、`temp_dir`、`artifacts`、`warnings`、`failures` を含む。
+- `artifacts[]` は `block_id`、`visual_id`、`related_block_id`、`kind`、`role`、`path`、`source`、`anchor` を持つ。
+- `kind` は `range` / `shape` / `image` / `chart` を使う。
+- `role` は `markdown` / `render_artifact` を使う。
+- `source` は `range_copy_picture` / `shape_copy_picture` / `chart_export` / `ooxml_image_copy` を使う。
+- render は live confirmation 用の確認コマンドであり、`result.md` / `manifest.json` を生成せず、LLM も呼ばない。
+
 用途:
 
 - Excel COM wrapper の live confirmation
@@ -390,6 +400,7 @@ assets/
 - Excel UI は可能な範囲で非表示にする。
 - 処理完了時は `finally` 相当の経路で workbook と Excel session を閉じる。
 - 既存のユーザー Excel プロセスを巻き込んで終了しない。
+- Excel Application は専用 session として起動し、既存 Excel process を共有前提にしない。
 
 ### 7.2 Range rendering
 
@@ -402,6 +413,7 @@ Range 画像を使うケース:
 - LLM に周辺レイアウトを補助情報として渡す場合。
 - Markdown だけでは意味を落とす特殊なセル配置がある場合。
 - `--save-render-artifacts` 指定時の確認成果物。
+- `render` コマンドで cell-based block を確認する場合。
 
 ### 7.3 Shape rendering
 
@@ -412,6 +424,7 @@ Range 画像を使うケース:
 
 元 workbook の画像は asset として保存し、近接 block または独立セクションに紐付ける。
 意味解釈に不要な装飾画像は、LLM に送らない判断をしてよいが、破棄理由は warning として残す。
+- `render` コマンドでは、image block の確認用画像とは別に、OOXML から取得できる元画像 asset を確認用成果物として複製してよい。
 
 ### 7.5 Chart rendering
 
@@ -590,6 +603,7 @@ strict では最終終了コードを失敗にする。
 - workbook / Excel session の cleanup を必ず試みる。
 - cleanup に失敗した場合も、既存のユーザー Excel プロセスを無差別に終了しない。
 - live confirmation が必要な失敗は、再現手順とログを案内する。
+- `render` コマンドでは、Excel COM が使えない場合や object matching に失敗した場合も、可能な範囲で JSON の `failures` として理由を返す。
 
 ## 12. テスト仕様
 

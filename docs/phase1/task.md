@@ -134,20 +134,20 @@ Phase 1 では `resume` / session persistence を実装しない。
 
 ## 8. Excel COM レンダリング
 
-- [ ] Excel session wrapper を実装する。
-- [ ] 1 job 1 Excel session を基本にする。
-- [ ] workbook を読み取り専用で開く。
-- [ ] 可能な範囲で Excel UI を非表示にする。
-- [ ] 処理完了時に workbook を閉じる。
-- [ ] 処理完了時に Excel session を閉じる。
-- [ ] 既存ユーザー Excel プロセスを巻き込んで終了しない。
-- [ ] `Range.CopyPicture` による Range 画像化を実装する。
-- [ ] `Shape.CopyPicture` による Shape 画像化を実装する。
-- [ ] `Chart.Export` による Chart PNG 出力を実装する。
-- [ ] 元画像の asset 保存を実装する。
-- [ ] `--save-render-artifacts` 指定時に補助 Range 画像を保存する。
-- [ ] `render` コマンドで指定 sheet のレンダリング結果を確認できるようにする。
-- [ ] Excel COM 依存箇所を live confirmation として分離する。
+- [x] Excel session wrapper を実装する。
+- [x] 1 job 1 Excel session を基本にする。
+- [x] workbook を読み取り専用で開く。
+- [x] 可能な範囲で Excel UI を非表示にする。
+- [x] 処理完了時に workbook を閉じる。
+- [x] 処理完了時に Excel session を閉じる。
+- [x] 既存ユーザー Excel プロセスを巻き込んで終了しない。
+- [x] `Range.CopyPicture` による Range 画像化を実装する。
+- [x] `Shape.CopyPicture` による Shape 画像化を実装する。
+- [x] `Chart.Export` による Chart PNG 出力を実装する。
+- [x] 元画像の asset 保存を実装する。
+- [x] `--save-render-artifacts` 指定時に補助 Range 画像を保存する。
+- [x] `render` コマンドで指定 sheet のレンダリング結果を確認できるようにする。
+- [x] Excel COM 依存箇所を live confirmation として分離する。
 
 ## 9. LLM Integration
 
@@ -250,7 +250,7 @@ Phase 1 では `resume` / session persistence を実装しない。
 - [ ] Markdown output composition test を書く。
 - [ ] LLM response parser retry test を書く。
 - [ ] Copilot SDK adapter は mock でテストできるようにする。
-- [ ] Excel COM live confirmation は通常の自動テストから分離する。
+- [x] Excel COM live confirmation は通常の自動テストから分離する。
 
 ## 14. Validation
 
@@ -278,6 +278,6 @@ Phase 1 では `resume` / session persistence を実装しない。
 - [ ] workbook 全体を 1 prompt にしていないことを確認する。
 - [ ] row 単位 LLM 解釈になっていないことを確認する。
 - [ ] 全画像を無差別に送っていないことを確認する。
-- [ ] Excel COM cleanup の失敗リスクを確認する。
-- [ ] `.xlsm` マクロ無効契約を確認する。
+- [x] Excel COM cleanup の失敗リスクを確認する。
+- [x] `.xlsm` マクロ無効契約を確認する。
 - [x] generated runtime outputs や private workbook を commit していないことを確認する。
