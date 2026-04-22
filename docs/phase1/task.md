@@ -151,23 +151,23 @@ Phase 1 では `resume` / session persistence を実装しない。
 
 ## 9. LLM Integration
 
-- [ ] Copilot SDK local CLI adapter を実装する。
-- [ ] sheet 単位で session を作成する。
-- [ ] `--model` 指定時だけモデル指定を渡す。
-- [ ] `--vision-model` 指定時だけ vision model 指定を渡す。
-- [ ] prompt builder を実装する。
-- [ ] Excel 内テキストを instruction ではなく data として扱う prompt を作る。
-- [ ] 画像をもとにした LLM 分析を補足情報として扱う prompt を作る。
-- [ ] attachment builder を実装する。
-- [ ] 近傍画像だけを attachment にする。
-- [ ] `--max-images-per-sheet` による画像数制限を実装する。
-- [ ] 全画像を無差別に送らないことをテスト可能にする。
-- [ ] LLM input JSON を構築する。
-- [ ] LLM response JSON parser を実装する。
-- [ ] response schema validation を実装する。
-- [ ] 応答破損時に 1 回だけ再試行する。
-- [ ] 再試行後も失敗した sheet を failed として記録する。
-- [ ] Phase 1 では session persistence を実装しない。
+- [x] Copilot SDK local CLI adapter を実装する。
+- [x] sheet 単位で session を作成する。
+- [x] `--model` 指定時だけモデル指定を渡す。
+- [x] `--vision-model` 指定時だけ vision model 指定を渡す。
+- [x] prompt builder を実装する。
+- [x] Excel 内テキストを instruction ではなく data として扱う prompt を作る。
+- [x] 画像をもとにした LLM 分析を補足情報として扱う prompt を作る。
+- [x] attachment builder を実装する。
+- [x] 近傍画像だけを attachment にする。
+- [x] `--max-images-per-sheet` による画像数制限を実装する。
+- [x] 全画像を無差別に送らないことをテスト可能にする。
+- [x] LLM input JSON を構築する。
+- [x] LLM response JSON parser を実装する。
+- [x] response schema validation を実装する。
+- [x] 応答破損時に 1 回だけ再試行する。
+- [x] 再試行後も失敗した sheet を failed として記録する。
+- [x] Phase 1 では session persistence を実装しない。
 
 ## 10. 出力生成
 
@@ -248,8 +248,8 @@ Phase 1 では `resume` / session persistence を実装しない。
 - [x] visual linking test を書く。
 - [ ] manifest generation test を書く。
 - [ ] Markdown output composition test を書く。
-- [ ] LLM response parser retry test を書く。
-- [ ] Copilot SDK adapter は mock でテストできるようにする。
+- [x] LLM response parser retry test を書く。
+- [x] Copilot SDK adapter は mock でテストできるようにする。
 - [x] Excel COM live confirmation は通常の自動テストから分離する。
 
 ## 14. Validation
@@ -263,8 +263,10 @@ Phase 1 では `resume` / session persistence を実装しない。
 - [ ] `assets/` が必要な画像を含むことを確認する。
 - [ ] `--save-debug-json` 指定時のみ `debug/` が出ることを確認する。
 - [ ] `--save-render-artifacts` 指定時のみ補助レンダリング成果物が出ることを確認する。
-- [ ] LLM 応答破損時の 1 回再試行を確認する。
-- [ ] 再試行失敗時に sheet failed として継続することを確認する。
+- [x] LLM 応答破損時の 1 回再試行を確認する。
+- [x] 再試行失敗時に sheet failed として継続することを確認する。
+- [ ] Copilot SDK local CLI behavior を live confirmation で確認する。
+- [ ] vision attachment behavior を live confirmation で確認する。
 - [ ] `--strict` 指定時に sheet failure が終了コードへ反映されることを確認する。
 
 ## 15. Review
@@ -272,12 +274,12 @@ Phase 1 では `resume` / session persistence を実装しない。
 - [x] README との整合性を確認する。
 - [x] `resume` / `--resume` が Phase 1 対象外として整理されていることを確認する。
 - [x] skill に変換ロジックが入っていないことを確認する。
-- [ ] prompt と response contract が Python 側にあることを確認する。
-- [ ] 画像をもとにした LLM 分析が主情報ではなく補足情報として扱われていることを確認する。
+- [x] prompt と response contract が Python 側にあることを確認する。
+- [x] 画像をもとにした LLM 分析が主情報ではなく補足情報として扱われていることを確認する。
 - [x] 中間表現が Copilot SDK 非依存であることを確認する。
-- [ ] workbook 全体を 1 prompt にしていないことを確認する。
-- [ ] row 単位 LLM 解釈になっていないことを確認する。
-- [ ] 全画像を無差別に送っていないことを確認する。
+- [x] workbook 全体を 1 prompt にしていないことを確認する。
+- [x] row 単位 LLM 解釈になっていないことを確認する。
+- [x] 全画像を無差別に送っていないことを確認する。
 - [x] Excel COM cleanup の失敗リスクを確認する。
 - [x] `.xlsm` マクロ無効契約を確認する。
 - [x] generated runtime outputs や private workbook を commit していないことを確認する。
