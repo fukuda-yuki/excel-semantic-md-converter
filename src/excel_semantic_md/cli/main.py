@@ -10,6 +10,7 @@ import json
 import platform
 import shutil
 import subprocess
+import sys
 import tempfile
 import zipfile
 from collections.abc import Sequence
@@ -228,9 +229,46 @@ def _handle_setup(args: argparse.Namespace) -> int:
 
 
 def _handle_convert(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
-    _validate_input_workbook(parser, args.input)
-    _ensure_output_directory(parser, args.out)
-    return _print_not_implemented("convert")
+    input_path = _validate_input_workbook(parser, args.input)
+    output_dir = _ensure_output_directory(parser, args.out)
+    from excel_semantic_md.app import cleanup_convert_result, run_convert_pipeline
+    from excel_semantic_md.output import write_convert_outputs
+    from openpyxl.utils.exceptions import InvalidFileException
+
+    command_options = {
+        "model": args.model,
+        "vision_model": args.vision_model,
+        "max_images_per_sheet": args.max_images_per_sheet,
+        "save_debug_json": args.save_debug_json,
+        "save_render_artifacts": args.save_render_artifacts,
+        "strict": args.strict,
+    }
+
+    convert_result = None
+    cleanup_warnings = []
+    try:
+        convert_result = run_convert_pipeline(
+            input_path,
+            output_dir,
+            command_options=command_options,
+        )
+        output_files = write_convert_outputs(convert_result)
+    except (OSError, InvalidFileException, zipfile.BadZipFile, ElementTree.ParseError, KeyError, ValueError) as exc:
+        parser.error(f"failed to convert input workbook: {args.input}: {exc}")
+    finally:
+        if convert_result is not None:
+            cleanup_warnings = cleanup_convert_result(convert_result)
+
+    print(f"result.md: {output_files.result_markdown}")
+    print(f"manifest.json: {output_files.manifest_json}")
+    if output_files.debug_dir is not None:
+        print(f"debug/: {output_files.debug_dir}")
+    for warning in cleanup_warnings:
+        print(f"cleanup warning: {warning.message}", file=sys.stderr)
+
+    if convert_result.has_failures and args.strict:
+        return NOT_IMPLEMENTED_EXIT_CODE
+    return SUCCESS_EXIT_CODE
 
 
 def _handle_inspect(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:

@@ -190,3 +190,17 @@ README は背景・全体像・初期構想の参考資料として扱う。
 - retry は parser / schema validation failure のときだけ 1 回行い、実行例外の再試行は行わない。
 - SDK cleanup 失敗は生例外を外へ漏らさず、sheet-level `failed` として返す。
 - `--vision-model` は指定時だけ session config に渡すが、実 SDK の live confirmation は未実施のため互換性確認は残課題である。
+
+## 17. phase1-output-generation 実装メモ
+
+2026-04-23 の `phase1-output-generation` では、`convert` を output writer まで接続し、`result.md` / `manifest.json` / `assets/` / `debug/` を生成できるようにした。
+
+- `WorkbookModel` は extraction / linking 層の source of truth のまま維持し、`convert` では sheet ごとの `SheetModel`、`RenderSheetResult`、`LlmRunResult`、CLI option を束ねる集約 DTO を新設した。
+- workbook reading の `warnings` / `failures` は `detect_blocks()` で `SheetModel` に引き継ぐよう修正し、`formula_cached_value_missing` などの sheet 失敗が `convert` 最終出力まで残るようにした。
+- `result.md` の successful sheet 本文は LLM `markdown` をそのまま主本文として使い、writer は不足している Markdown 用 asset 参照だけを後置する。failed sheet に対して block から代替本文は再構成しない。
+- 公開 asset は `assets/sheet-{sheet_index:03d}/...` に安定命名で保存する。`role=markdown` は常に保存し、`role=render_artifact` は `--save-render-artifacts` 指定時のみ保存する。
+- `manifest.json` は top-level に `schema_version`、`input_file_name`、`generated_at`、`command_options`、`sheets`、`blocks` を持つ整形 JSON とし、sheet ごとに render / llm status、block ごとに最終公開 asset path を含める。
+- `debug/` は `--save-debug-json` 指定時のみ保存し、`workbook_extraction.json`、`linked_blocks.json`、`render_plan.json`、`llm_input.json`、`llm_response.json` を出力する。
+- `render` コマンドの JSON は live confirmation 用のまま維持し、`convert` の manifest には `temp_dir` や一時絶対パスを含めない。
+- 非 `strict` では sheet failed を `result.md` / `manifest.json` に残したまま他 sheet を継続し、`strict` では同じ出力を残したうえで最終終了コードだけ失敗にする。
+- 空 block の visible sheet は render / LLM を強制せず、empty-sheet short circuit で successful sheet として扱う。

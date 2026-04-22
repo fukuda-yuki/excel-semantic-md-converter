@@ -8,10 +8,13 @@ from openpyxl.utils import get_column_letter
 
 from excel_semantic_md.excel.workbook_reader import (
     CellReadValue,
+    ReadFailure,
+    ReadWarning,
     SheetReadResult,
     WorkbookReadResult,
 )
 from excel_semantic_md.models import (
+    FailureInfo,
     HeadingBlock,
     ParagraphBlock,
     Rect,
@@ -100,6 +103,8 @@ def detect_blocks(read_result: WorkbookReadResult) -> WorkbookModel:
                 sheet_index=read_sheet.sheet_index,
                 name=read_sheet.name,
                 blocks=sorted_blocks,
+                failures=[_failure_info(failure) for failure in read_sheet.failures],
+                warnings=[_warning_info(warning) for warning in read_sheet.warnings],
             )
         )
     return WorkbookModel(sheets=sheets, input_file_name=read_result.input_file_name)
@@ -472,6 +477,22 @@ def _looks_numeric(text: str) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _warning_info(warning: ReadWarning) -> WarningInfo:
+    return WarningInfo(
+        code=warning.code,
+        message=warning.message,
+        details=dict(warning.details),
+    )
+
+
+def _failure_info(failure: ReadFailure) -> FailureInfo:
+    return FailureInfo(
+        stage=failure.stage,
+        message=failure.message,
+        details={"code": failure.code, **dict(failure.details)},
+    )
 
 
 __all__ = ["detect_blocks"]

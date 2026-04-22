@@ -110,35 +110,50 @@ class CliTests(unittest.TestCase):
         self.assertNotEqual(code, 0)
         self.assertIn("invalid choice", stderr)
 
-    def test_convert_accepts_options_and_fails_as_unimplemented(self) -> None:
+    def test_convert_accepts_options_and_runs_pipeline(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             input_path = temp_path / "sample.xlsx"
             out_path = temp_path / "out"
             input_path.write_bytes(b"synthetic workbook placeholder")
-
-            code, stdout, _stderr = self._run_with_output(
-                [
-                    "convert",
-                    "--input",
-                    str(input_path),
-                    "--out",
-                    str(out_path),
-                    "--model",
-                    "text-model",
-                    "--vision-model",
-                    "vision-model",
-                    "--max-images-per-sheet",
-                    "3",
-                    "--save-debug-json",
-                    "--save-render-artifacts",
-                    "--strict",
-                ]
+            fake_result = mock.Mock(has_failures=False)
+            fake_output_files = mock.Mock(
+                result_markdown=out_path / "result.md",
+                manifest_json=out_path / "manifest.json",
+                debug_dir=out_path / "debug",
             )
+            with (
+                mock.patch("excel_semantic_md.app.run_convert_pipeline", return_value=fake_result) as run_pipeline,
+                mock.patch("excel_semantic_md.output.write_convert_outputs", return_value=fake_output_files) as write_outputs,
+                mock.patch("excel_semantic_md.app.cleanup_convert_result") as cleanup_result,
+            ):
+                code, stdout, _stderr = self._run_with_output(
+                    [
+                        "convert",
+                        "--input",
+                        str(input_path),
+                        "--out",
+                        str(out_path),
+                        "--model",
+                        "text-model",
+                        "--vision-model",
+                        "vision-model",
+                        "--max-images-per-sheet",
+                        "3",
+                        "--save-debug-json",
+                        "--save-render-artifacts",
+                        "--strict",
+                    ]
+                )
 
-            self.assertEqual(code, 1)
-            self.assertIn("not implemented", stdout)
+            self.assertEqual(code, 0)
+            self.assertIn("result.md:", stdout)
+            self.assertIn("manifest.json:", stdout)
+            self.assertIn("debug/:", stdout)
             self.assertTrue(out_path.is_dir())
+            run_pipeline.assert_called_once()
+            write_outputs.assert_called_once_with(fake_result)
+            cleanup_result.assert_called_once_with(fake_result)
 
     def test_convert_rejects_missing_input_with_clear_error(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

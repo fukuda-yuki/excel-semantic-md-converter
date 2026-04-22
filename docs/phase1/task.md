@@ -171,48 +171,48 @@ Phase 1 では `resume` / session persistence を実装しない。
 
 ## 10. 出力生成
 
-- [ ] `result.md` writer を実装する。
-- [ ] sheet 順を保持して Markdown を連結する。
-- [ ] sheet ごとに見出しを出す。
-- [ ] table を Markdown table として出力する。
-- [ ] 図形テキストを本文または注記として反映する。
-- [ ] 画像を必要に応じて Markdown に貼る。
-- [ ] グラフ画像を Markdown に貼る。
-- [ ] Markdown で再現できない要素を画像として貼る。
-- [ ] 不確実な解釈を `result.md` に注記として出す。
-- [ ] failed sheet を `result.md` に明示する。
-- [ ] `manifest.json` writer を実装する。
-- [ ] schema version を manifest に含める。
-- [ ] input file name を manifest に含める。
-- [ ] generated timestamp を manifest に含める。
-- [ ] command options を manifest に含める。
-- [ ] sheet list を manifest に含める。
-- [ ] block list を manifest に含める。
-- [ ] block id / kind / anchor を manifest に含める。
-- [ ] asset path を manifest に含める。
-- [ ] render status を manifest に含める。
-- [ ] LLM status を manifest に含める。
-- [ ] warning / unknown / failed sheet 情報を manifest に含める。
-- [ ] `assets/` の sheet 別保存を実装する。
-- [ ] 安定した asset 命名規則を実装する。
-- [ ] `debug/` は `--save-debug-json` 指定時のみ出力する。
-- [ ] `logs/` は既定では出力しない。
+- [x] `result.md` writer を実装する。
+- [x] sheet 順を保持して Markdown を連結する。
+- [x] sheet ごとに見出しを出す。
+- [x] table を Markdown table として出力する。
+- [x] 図形テキストを本文または注記として反映する。
+- [x] 画像を必要に応じて Markdown に貼る。
+- [x] グラフ画像を Markdown に貼る。
+- [x] Markdown で再現できない要素を画像として貼る。
+- [x] 不確実な解釈を `result.md` に注記として出す。
+- [x] failed sheet を `result.md` に明示する。
+- [x] `manifest.json` writer を実装する。
+- [x] schema version を manifest に含める。
+- [x] input file name を manifest に含める。
+- [x] generated timestamp を manifest に含める。
+- [x] command options を manifest に含める。
+- [x] sheet list を manifest に含める。
+- [x] block list を manifest に含める。
+- [x] block id / kind / anchor を manifest に含める。
+- [x] asset path を manifest に含める。
+- [x] render status を manifest に含める。
+- [x] LLM status を manifest に含める。
+- [x] warning / unknown / failed sheet 情報を manifest に含める。
+- [x] `assets/` の sheet 別保存を実装する。
+- [x] 安定した asset 命名規則を実装する。
+- [x] `debug/` は `--save-debug-json` 指定時のみ出力する。
+- [x] `logs/` は既定では出力しない。
 
 ## 11. Orchestrator
 
-- [ ] `convert` の全体フローを実装する。
-- [ ] workbook 読み取りを呼び出す。
-- [ ] visual metadata 抽出を呼び出す。
-- [ ] block 検出を呼び出す。
-- [ ] visual linking を呼び出す。
-- [ ] render plan を作成する。
-- [ ] Excel COM rendering を呼び出す。
-- [ ] sheet 単位 LLM input を作成する。
-- [ ] sheet 単位 LLM 解釈を実行する。
-- [ ] sheet 単位失敗を failed として継続する。
-- [ ] `--strict` 指定時は sheet failure を最終失敗にする。
-- [ ] Markdown / manifest / assets を出力する。
-- [ ] 途中失敗時も可能な範囲で中間状態を manifest に残す。
+- [x] `convert` の全体フローを実装する。
+- [x] workbook 読み取りを呼び出す。
+- [x] visual metadata 抽出を呼び出す。
+- [x] block 検出を呼び出す。
+- [x] visual linking を呼び出す。
+- [x] render plan を作成する。
+- [x] Excel COM rendering を呼び出す。
+- [x] sheet 単位 LLM input を作成する。
+- [x] sheet 単位 LLM 解釈を実行する。
+- [x] sheet 単位失敗を failed として継続する。
+- [x] `--strict` 指定時は sheet failure を最終失敗にする。
+- [x] Markdown / manifest / assets を出力する。
+- [x] 途中失敗時も可能な範囲で中間状態を manifest に残す。
 
 ## 12. Copilot Skill
 
@@ -246,8 +246,8 @@ Phase 1 では `resume` / session persistence を実装しない。
 - [x] block ID stability test を書く。
 - [x] OOXML visual metadata extraction test を書く。
 - [x] visual linking test を書く。
-- [ ] manifest generation test を書く。
-- [ ] Markdown output composition test を書く。
+- [x] manifest generation test を書く。
+- [x] Markdown output composition test を書く。
 - [x] LLM response parser retry test を書く。
 - [x] Copilot SDK adapter は mock でテストできるようにする。
 - [x] Excel COM live confirmation は通常の自動テストから分離する。
@@ -257,12 +257,12 @@ Phase 1 では `resume` / session persistence を実装しない。
 - [x] `python -m pip install -e .` で local install できることを確認する。
 - [x] `excel-semantic-md inspect --input <fixture>` を実行する。
 - [ ] `excel-semantic-md setup` を実行する。
-- [ ] `excel-semantic-md convert --input <fixture> --out <out>` を実行する。
-- [ ] `result.md` が生成されることを確認する。
-- [ ] `manifest.json` が生成されることを確認する。
-- [ ] `assets/` が必要な画像を含むことを確認する。
-- [ ] `--save-debug-json` 指定時のみ `debug/` が出ることを確認する。
-- [ ] `--save-render-artifacts` 指定時のみ補助レンダリング成果物が出ることを確認する。
+- [x] `excel-semantic-md convert --input <fixture> --out <out>` を実行する。
+- [x] `result.md` が生成されることを確認する。
+- [x] `manifest.json` が生成されることを確認する。
+- [x] `assets/` が必要な画像を含むことを確認する。
+- [x] `--save-debug-json` 指定時のみ `debug/` が出ることを確認する。
+- [x] `--save-render-artifacts` 指定時のみ補助レンダリング成果物が出ることを確認する。
 - [x] LLM 応答破損時の 1 回再試行を確認する。
 - [x] 再試行失敗時に sheet failed として継続することを確認する。
 - [ ] Copilot SDK local CLI behavior を live confirmation で確認する。
