@@ -98,6 +98,7 @@ class LlmRunResult:
     attempts: int
     response: LlmResponse | None = None
     failure: FailureInfo | None = None
+    used_model: str | None = None
 
     def __post_init__(self) -> None:
         if self.status not in {"succeeded", "failed"}:
@@ -116,4 +117,6 @@ class LlmRunResult:
             "response": None if self.response is None else self.response.to_dict(),
             "failure": None if self.failure is None else self.failure.to_dict(),
         }
+        if self.used_model is not None:
+            data["used_model"] = self.used_model
         return data

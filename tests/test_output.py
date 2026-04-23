@@ -102,6 +102,7 @@ def test_write_convert_outputs_writes_result_and_manifest_with_failed_sheet(tmp_
                 llm_result=LlmRunResult(
                     status="succeeded",
                     attempts=1,
+                    used_model="gpt-5.4",
                     response=LlmResponse(
                         sheet_summary="Summary sheet",
                         sections=[],
@@ -138,6 +139,7 @@ def test_write_convert_outputs_writes_result_and_manifest_with_failed_sheet(tmp_
     assert manifest["command_options"]["model"] == "text-model"
     assert [sheet["status"] for sheet in manifest["sheets"]] == ["succeeded", "failed"]
     assert manifest["sheets"][0]["render"]["status"] == "succeeded"
+    assert manifest["sheets"][0]["llm"]["used_model"] == "gpt-5.4"
     assert manifest["sheets"][1]["llm"]["status"] == "skipped"
     assert manifest["blocks"][1]["visual_id"] == "s001-v001-chart"
     assert manifest["blocks"][1]["related_block_id"] == "s001-b001-paragraph"
@@ -248,6 +250,80 @@ def test_write_convert_outputs_writes_debug_and_optional_render_artifacts(tmp_pa
     assert (output_files.debug_dir / "llm_response.json").is_file()
     result_markdown = output_files.result_markdown.read_text(encoding="utf-8")
     assert "assets/sheet-001/s001-b001-paragraph-range-001.png" not in result_markdown
+
+
+def test_write_convert_outputs_does_not_rewrite_already_published_asset_path(tmp_path: Path) -> None:
+    sheet = SheetModel(
+        sheet_index=1,
+        name="Assets",
+        blocks=[
+            ChartBlock(
+                id="s001-b001-chart",
+                anchor=Rect(sheet="Assets", start_row=1, start_col=1, end_row=4, end_col=4, a1="A1:D4"),
+                source=SourceKind.CHART,
+                title="Chart",
+            )
+        ],
+    )
+    render_result = RenderSheetResult(
+        input_file_name="book.xlsx",
+        sheet_name="Assets",
+        temp_dir=str(tmp_path / "render-assets"),
+        artifacts=[
+            _artifact(
+                tmp_path / "render-assets" / "chart.png",
+                block_id="s001-b001-chart",
+                kind="chart",
+                role="markdown",
+                source="chart_export",
+                anchor=Rect(sheet="Assets", start_row=1, start_col=1, end_row=4, end_col=4, a1="A1:D4"),
+                related_block_id=None,
+                visual_id=None,
+            )
+        ],
+    )
+    convert_result = ConvertResult(
+        input_file_name="book.xlsx",
+        schema_version="phase1.0",
+        generated_at="2026-04-23T00:00:00+00:00",
+        command_options={
+            "model": None,
+            "vision_model": None,
+            "max_images_per_sheet": None,
+            "save_debug_json": False,
+            "save_render_artifacts": False,
+            "strict": False,
+        },
+        output_dir=tmp_path / "out",
+        workbook_extraction_payload={"schema_version": "phase1.0", "input_file_name": "book.xlsx", "sheets": []},
+        block_detection_payload={"schema_version": "phase1.0", "input_file_name": "book.xlsx", "sheets": []},
+        linked_workbook_payload={"schema_version": "phase1.0", "input_file_name": "book.xlsx", "sheets": []},
+        sheets=[
+            ConvertSheetResult(
+                sheet=sheet,
+                status="succeeded",
+                markdown="![Chart](assets/sheet-001/s001-b001-chart-001.png)",
+                render_result=render_result,
+                llm_result=LlmRunResult(
+                    status="succeeded",
+                    attempts=1,
+                    response=LlmResponse(
+                        sheet_summary="Assets",
+                        sections=[],
+                        figures=[],
+                        unknowns=[],
+                        markdown="![Chart](assets/sheet-001/s001-b001-chart-001.png)",
+                    ),
+                ),
+            )
+        ],
+    )
+
+    output_files = write_convert_outputs(convert_result)
+
+    result_markdown = output_files.result_markdown.read_text(encoding="utf-8")
+    assert "assets/sheet-001/assets/sheet-001" not in result_markdown
+    assert "![Chart](assets/sheet-001/s001-b001-chart-001.png)" in result_markdown
 
 
 def test_convert_command_writes_outputs_and_only_fails_in_strict_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -473,6 +549,82 @@ def test_run_convert_pipeline_normalizes_render_exception_to_failed_sheet(tmp_pa
     assert result.sheets[0].status == "failed"
     assert result.sheets[0].failures[0].stage == "render"
     assert "render boom" in result.sheets[0].failures[0].details["error"]
+
+
+def test_run_convert_pipeline_normalizes_render_plan_exception_to_failed_sheet(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    input_path = tmp_path / "book.xlsx"
+    input_path.write_bytes(b"placeholder")
+    success_sheet = SheetModel(
+        sheet_index=1,
+        name="Success",
+        blocks=[],
+    )
+    broken_sheet = SheetModel(
+        sheet_index=2,
+        name="PlanExplodes",
+        blocks=[
+            ParagraphBlock(
+                id="s002-b001-paragraph",
+                anchor=Rect(sheet="PlanExplodes", start_row=1, start_col=1, end_row=1, end_col=1, a1="A1"),
+                source=SourceKind.CELLS,
+                text="Paragraph",
+            )
+        ],
+    )
+    read_result = SimpleNamespace(
+        input_file_name="book.xlsx",
+        to_dict=lambda: {"schema_version": "phase1.0", "input_file_name": "book.xlsx", "sheets": []},
+    )
+    linked_workbook = SimpleNamespace(
+        schema_version="phase1.0",
+        input_file_name="book.xlsx",
+        sheets=[success_sheet, broken_sheet],
+        to_dict=lambda: {"schema_version": "phase1.0", "input_file_name": "book.xlsx", "sheets": []},
+    )
+
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.read_workbook", lambda _path: read_result)
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.detect_blocks", lambda _read_result: linked_workbook)
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.read_visual_metadata", lambda _path: [])
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.link_visuals", lambda block_model, _visuals: block_model)
+
+    def fake_build_render_plan(sheet, _visual_sheet, *, save_render_artifacts: bool):
+        if sheet.name == "PlanExplodes":
+            raise RuntimeError("plan boom")
+        return ([], [], [])
+
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.build_render_plan", fake_build_render_plan)
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.GitHubCopilotSdkAdapter", lambda: SimpleNamespace())
+
+    result = run_convert_pipeline(
+        input_path,
+        tmp_path / "out",
+        command_options={
+            "model": None,
+            "vision_model": None,
+            "max_images_per_sheet": None,
+            "save_debug_json": False,
+            "save_render_artifacts": False,
+            "strict": False,
+        },
+    )
+
+    assert [sheet.status for sheet in result.sheets] == ["succeeded", "failed"]
+    assert result.sheets[0].llm_result is not None
+    assert result.sheets[0].llm_result.status == "succeeded"
+    assert result.sheets[1].failures[0].stage == "render_plan"
+    assert "plan boom" in result.sheets[1].failures[0].details["error"]
+
+    output_files = write_convert_outputs(result)
+    manifest = json.loads(output_files.manifest_json.read_text(encoding="utf-8"))
+    result_markdown = output_files.result_markdown.read_text(encoding="utf-8")
+    assert [sheet["status"] for sheet in manifest["sheets"]] == ["succeeded", "failed"]
+    assert manifest["sheets"][1]["render"]["status"] == "failed"
+    assert manifest["sheets"][1]["render"]["failures"][0]["stage"] == "render_plan"
+    assert manifest["sheets"][1]["llm"]["status"] == "skipped"
+    assert "## PlanExplodes" in result_markdown
+    assert "Failed to convert this sheet." in result_markdown
 
 
 def test_run_convert_pipeline_treats_failed_llm_status_without_failure_object_as_failed_sheet(

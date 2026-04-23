@@ -50,8 +50,10 @@ class GitHubCopilotSdkAdapter:
             )
 
         attempts = 0
+        used_model: str | None = None
         try:
             session = await client.create_session(**_build_session_kwargs(run_options, permission_handler))
+            used_model = await _get_used_model(session)
             attachment_payload = [_attachment_payload(item) for item in attachments]
 
             last_error: ValueError | None = None
@@ -61,7 +63,7 @@ class GitHubCopilotSdkAdapter:
                 response_text = _extract_response_text(response)
                 try:
                     parsed = parse_llm_response(response_text)
-                    result = LlmRunResult(status="succeeded", attempts=attempts, response=parsed)
+                    result = LlmRunResult(status="succeeded", attempts=attempts, response=parsed, used_model=used_model)
                     break
                 except ValueError as exc:
                     last_error = exc
@@ -76,6 +78,7 @@ class GitHubCopilotSdkAdapter:
                         message="LLM response validation failed after retry.",
                         details={"sheet_name": sheet.name, "error": str(last_error)},
                     ),
+                    used_model=used_model,
                 )
         except Exception as exc:
             result = LlmRunResult(
@@ -86,6 +89,7 @@ class GitHubCopilotSdkAdapter:
                     message="GitHub Copilot SDK execution failed.",
                     details={"sheet_name": sheet.name, "error": str(exc)},
                 ),
+                used_model=used_model,
             )
         finally:
             if client is not None:
@@ -138,6 +142,17 @@ def _attachment_payload(attachment: Any) -> dict[str, str]:
     }
 
 
+async def _get_used_model(session: Any) -> str | None:
+    try:
+        rpc = getattr(session, "rpc", None)
+        if rpc is None or getattr(rpc, "model", None) is None:
+            return None
+        current = await rpc.model.get_current()
+    except Exception:
+        return None
+    return getattr(current, "model_id", None)
+
+
 def _extract_response_text(response: Any) -> str:
     if response is None:
         raise ValueError("LLM response did not include an assistant message")
@@ -172,6 +187,7 @@ async def _stop_client(
                 attempts=result.attempts,
                 response=result.response,
                 failure=failure,
+                used_model=result.used_model,
             )
         return LlmRunResult(
             status="failed",
@@ -182,5 +198,6 @@ async def _stop_client(
                 message="GitHub Copilot SDK cleanup failed.",
                 details={"sheet_name": sheet_name, "cleanup_error": str(exc)},
             ),
+            used_model=None if result is None else result.used_model,
         )
     return None

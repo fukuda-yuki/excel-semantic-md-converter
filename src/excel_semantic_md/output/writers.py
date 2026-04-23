@@ -150,7 +150,7 @@ def _rewrite_asset_references(markdown: str, assets: list[PublishedAsset]) -> st
     rewritten = markdown
     for asset in assets:
         basename = Path(asset.path).name
-        if basename == asset.path or basename not in rewritten:
+        if basename == asset.path or basename not in rewritten or asset.path in rewritten:
             continue
         rewritten = rewritten.replace(basename, asset.path)
     return rewritten
@@ -241,15 +241,22 @@ def _sheet_manifest(sheet_result: ConvertSheetResult) -> dict[str, Any]:
         render_status = "failed" if sheet_result.render_result.failures else "succeeded"
         render_warnings = [warning.to_dict() for warning in sheet_result.render_result.warnings]
         render_failures = [failure.to_dict() for failure in sheet_result.render_result.failures]
+    else:
+        render_failures = [failure.to_dict() for failure in _stage_failures(sheet_result, {"render_plan", "render"})]
+        if render_failures:
+            render_status = "failed"
 
     llm_payload: dict[str, Any]
     if sheet_result.llm_result is None:
-        llm_payload = {"status": "skipped"}
+        llm_failures = [_failure_payload(failure) for failure in _stage_failures(sheet_result, {"llm_input", "llm"})]
+        llm_payload = {"status": "failed", "failures": llm_failures} if llm_failures else {"status": "skipped"}
     else:
         llm_payload = {
             "status": sheet_result.llm_result.status,
             "attempts": sheet_result.llm_result.attempts,
         }
+        if sheet_result.llm_result.used_model is not None:
+            llm_payload["used_model"] = sheet_result.llm_result.used_model
         if sheet_result.llm_result.failure is not None:
             llm_payload["failure"] = _failure_payload(sheet_result.llm_result.failure)
         if sheet_result.llm_result.response is not None:
@@ -272,6 +279,10 @@ def _sheet_manifest(sheet_result: ConvertSheetResult) -> dict[str, Any]:
         },
         "llm": llm_payload,
     }
+
+
+def _stage_failures(sheet_result: ConvertSheetResult, stages: set[str]) -> list[Any]:
+    return [failure for failure in sheet_result.failures if failure.stage in stages]
 
 
 def _block_manifest(sheet: Any, block: Block, assets: list[PublishedAsset]) -> dict[str, Any]:

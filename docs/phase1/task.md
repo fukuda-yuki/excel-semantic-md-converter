@@ -130,7 +130,7 @@ Phase 1 では `resume` / session persistence を実装しない。
 - [x] 紐付かない shape を独立 block にする。
 - [x] 紐付かない image を独立 block にする。
 - [x] 紐付かない chart を独立 block にする。
-- [ ] 紐付け結果を manifest に残す。
+- [x] 紐付け結果を manifest に残す。
 
 ## 8. Excel COM レンダリング
 
@@ -256,7 +256,7 @@ Phase 1 では `resume` / session persistence を実装しない。
 
 - [x] `python -m pip install -e .` で local install できることを確認する。
 - [x] `excel-semantic-md inspect --input <fixture>` を実行する。
-- [ ] `excel-semantic-md setup` を実行する。
+- [x] `excel-semantic-md setup` を実行する。
 - [x] `excel-semantic-md convert --input <fixture> --out <out>` を実行する。
 - [x] `result.md` が生成されることを確認する。
 - [x] `manifest.json` が生成されることを確認する。
@@ -267,7 +267,7 @@ Phase 1 では `resume` / session persistence を実装しない。
 - [x] 再試行失敗時に sheet failed として継続することを確認する。
 - [ ] Copilot SDK local CLI behavior を live confirmation で確認する。
 - [ ] vision attachment behavior を live confirmation で確認する。
-- [ ] `--strict` 指定時に sheet failure が終了コードへ反映されることを確認する。
+- [x] `--strict` 指定時に sheet failure が終了コードへ反映されることを確認する。
 
 ## 15. Review
 

@@ -112,108 +112,123 @@ def _run_sheet_pipeline(
     llm_input_payload: dict[str, Any] | None = None
     llm_result: LlmRunResult | None = None
     markdown: str | None = None
+    stage = "sheet"
 
-    if not failures:
-        plan_items, plan_warnings, plan_failures = build_render_plan(
-            linked_sheet,
-            visual_sheet,
-            save_render_artifacts=bool(command_options.get("save_render_artifacts")),
-        )
-        render_plan_payload = {
-            "sheet_index": linked_sheet.sheet_index,
-            "name": linked_sheet.name,
-            "items": [
-                {
-                    "block_id": item.block.id,
-                    "kind": item.kind,
-                    "role": item.role.value,
-                    "source": item.source,
-                    "target_part": item.target_part,
-                }
-                for item in plan_items
-            ],
-            "warnings": [warning.to_dict() for warning in plan_warnings],
-            "failures": [failure.to_dict() for failure in plan_failures],
-        }
-        warnings.extend(plan_warnings)
-        failures.extend(plan_failures)
-
-        if not failures and not plan_items and not linked_sheet.blocks:
-            llm_input = build_llm_input(linked_sheet, [])
-            llm_input_payload = llm_input.to_dict()
-            llm_result = LlmRunResult(
-                status="succeeded",
-                attempts=1,
-                response=LlmResponse(
-                    sheet_summary="No visible content.",
-                    sections=[],
-                    figures=[],
-                    unknowns=[],
-                    markdown="",
-                    raw={"generated_by": "empty_sheet_short_circuit"},
-                ),
+    try:
+        if not failures:
+            stage = "render_plan"
+            plan_items, plan_warnings, plan_failures = build_render_plan(
+                linked_sheet,
+                visual_sheet,
+                save_render_artifacts=bool(command_options.get("save_render_artifacts")),
             )
-            markdown = ""
-        elif not failures:
-            try:
-                render_result = render_with_excel_com(
-                    input_path,
-                    input_file_name=input_file_name,
-                    sheet_name=linked_sheet.name,
-                    plan_items=plan_items,
-                    warnings=[],
-                    failures=[],
-                )
-            except Exception as exc:
-                failures.append(
-                    FailureInfo(
-                        stage="render",
-                        message="Render stage raised an unexpected exception.",
-                        details={"sheet_name": linked_sheet.name, "error": str(exc)},
-                    )
-                )
-            else:
-                warnings.extend(render_result.warnings)
-                failures.extend(render_result.failures)
+            render_plan_payload = {
+                "sheet_index": linked_sheet.sheet_index,
+                "name": linked_sheet.name,
+                "items": [
+                    {
+                        "block_id": item.block.id,
+                        "kind": item.kind,
+                        "role": item.role.value,
+                        "source": item.source,
+                        "target_part": item.target_part,
+                    }
+                    for item in plan_items
+                ],
+                "warnings": [warning.to_dict() for warning in plan_warnings],
+                "failures": [failure.to_dict() for failure in plan_failures],
+            }
+            warnings.extend(plan_warnings)
+            failures.extend(plan_failures)
 
-            if not failures:
-                attachments = build_llm_attachments(
-                    linked_sheet,
-                    render_result,
-                    max_images_per_sheet=command_options.get("max_images_per_sheet"),
-                )
-                llm_input = build_llm_input(linked_sheet, attachments)
+            if not failures and not plan_items and not linked_sheet.blocks:
+                stage = "llm_input"
+                llm_input = build_llm_input(linked_sheet, [])
                 llm_input_payload = llm_input.to_dict()
+                llm_result = LlmRunResult(
+                    status="succeeded",
+                    attempts=1,
+                    response=LlmResponse(
+                        sheet_summary="No visible content.",
+                        sections=[],
+                        figures=[],
+                        unknowns=[],
+                        markdown="",
+                        raw={"generated_by": "empty_sheet_short_circuit"},
+                    ),
+                )
+                markdown = ""
+            elif not failures:
                 try:
-                    llm_result = llm_adapter.run_sheet(
-                        linked_sheet,
-                        render_result,
-                        options=LlmRunOptions(
-                            model=command_options.get("model"),
-                            vision_model=command_options.get("vision_model"),
-                            max_images_per_sheet=command_options.get("max_images_per_sheet"),
-                        ),
+                    stage = "render"
+                    render_result = render_with_excel_com(
+                        input_path,
+                        input_file_name=input_file_name,
+                        sheet_name=linked_sheet.name,
+                        plan_items=plan_items,
+                        warnings=[],
+                        failures=[],
                     )
                 except Exception as exc:
                     failures.append(
                         FailureInfo(
-                            stage="llm",
-                            message="LLM stage raised an unexpected exception.",
+                            stage="render",
+                            message="Render stage raised an unexpected exception.",
                             details={"sheet_name": linked_sheet.name, "error": str(exc)},
                         )
                     )
                 else:
-                    if llm_result.status == "failed":
+                    warnings.extend(render_result.warnings)
+                    failures.extend(render_result.failures)
+
+                if not failures:
+                    stage = "llm_input"
+                    attachments = build_llm_attachments(
+                        linked_sheet,
+                        render_result,
+                        max_images_per_sheet=command_options.get("max_images_per_sheet"),
+                    )
+                    llm_input = build_llm_input(linked_sheet, attachments)
+                    llm_input_payload = llm_input.to_dict()
+                    try:
+                        stage = "llm"
+                        llm_result = llm_adapter.run_sheet(
+                            linked_sheet,
+                            render_result,
+                            options=LlmRunOptions(
+                                model=command_options.get("model"),
+                                vision_model=command_options.get("vision_model"),
+                                max_images_per_sheet=command_options.get("max_images_per_sheet"),
+                            ),
+                        )
+                    except Exception as exc:
                         failures.append(
-                            llm_result.failure
-                            or FailureInfo(
+                            FailureInfo(
                                 stage="llm",
-                                message="LLM stage reported failure without details.",
-                                details={"sheet_name": linked_sheet.name},
+                                message="LLM stage raised an unexpected exception.",
+                                details={"sheet_name": linked_sheet.name, "error": str(exc)},
                             )
                         )
-                    elif llm_result.response is not None:
-                        markdown = llm_result.response.markdown
+                    else:
+                        if llm_result.status == "failed":
+                            failures.append(
+                                llm_result.failure
+                                or FailureInfo(
+                                    stage="llm",
+                                    message="LLM stage reported failure without details.",
+                                    details={"sheet_name": linked_sheet.name},
+                                )
+                            )
+                        elif llm_result.response is not None:
+                            markdown = llm_result.response.markdown
+    except Exception as exc:
+        failures.append(
+            FailureInfo(
+                stage=stage,
+                message="Sheet pipeline raised an unexpected exception.",
+                details={"sheet_name": linked_sheet.name, "error": str(exc)},
+            )
+        )
 
     status = "failed" if failures else "succeeded"
     return ConvertSheetResult(

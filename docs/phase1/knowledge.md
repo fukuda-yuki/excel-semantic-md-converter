@@ -204,3 +204,18 @@ README は背景・全体像・初期構想の参考資料として扱う。
 - `render` コマンドの JSON は live confirmation 用のまま維持し、`convert` の manifest には `temp_dir` や一時絶対パスを含めない。
 - 非 `strict` では sheet failed を `result.md` / `manifest.json` に残したまま他 sheet を継続し、`strict` では同じ出力を残したうえで最終終了コードだけ失敗にする。
 - 空 block の visible sheet は render / LLM を強制せず、empty-sheet short circuit で successful sheet として扱う。
+
+## 18. phase1-validation-review 実装メモ
+
+2026-04-23 の `phase1-validation-review` では、task 11〜15 の validation 証跡と stale task 状態を整理した。
+
+- `python -m pytest -q` は `86 passed`。
+- `python -m excel_semantic_md.cli.main setup --out .tmp-validation-setup` を実行し、package import、CLI entry point、Windows 判定、Copilot CLI 候補、skill launcher、`--out` 書き込み確認が診断出力されることを確認した。
+- `C:\Users\mwam0\AppData\Roaming\Python\Python314\Scripts\excel-semantic-md.exe` でも `setup` / `convert` / `convert --strict` を実行し、外部公開 CLI entry point 経由でも同じ結果になることを確認した。
+- 現環境では `pythoncom` / `win32com.client` が未導入のため、`setup` は Excel COM を「not available or not confirmed」と報告する。
+- `python -m excel_semantic_md.cli.main convert --input tests/fixtures/visuals/no-visuals.xlsx --out .tmp-validation-convert` を実行し、非 `strict` では `result.md` / `manifest.json` を出力したうえで sheet failure を残せることを確認した。
+- 同 fixture で `--strict` を付けると、同じ出力を残したまま終了コード `1` を返すことを確認した。
+- 現環境の `convert` 実行では `pywin32` 不足により render failure となるため、Copilot SDK local CLI behavior と vision attachment behavior の live confirmation は pending のまま残す。
+- editable install で生成される `excel-semantic-md.exe` は `C:\Users\mwam0\AppData\Roaming\Python\Python314\Scripts` に存在するが、この shell の `PATH` には含まれていない。
+- sheet pipeline 内の未捕捉例外は、可能な限り sheet-level `FailureInfo` に正規化して他 sheet 継続と output writer 到達を優先する。
+- `manifest.json` の sheet-level `llm` payload には、Copilot SDK から current model を取得できた場合だけ `used_model` を含める。

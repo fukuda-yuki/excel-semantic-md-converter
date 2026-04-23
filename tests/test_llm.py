@@ -146,6 +146,7 @@ def test_adapter_does_not_pass_optional_models_when_omitted(monkeypatch: pytest.
     result = asyncio.run(GitHubCopilotSdkAdapter().run_sheet_async(_make_sheet(), None))
 
     assert result.status == "succeeded"
+    assert result.used_model is None
     assert observed["session_kwargs"] == {}
     assert observed["attachments"] is None
     assert observed["started"] is True
@@ -193,8 +194,45 @@ def test_adapter_retries_once_for_invalid_json_then_succeeds(monkeypatch: pytest
 
     assert result.status == "succeeded"
     assert result.attempts == 2
+    assert result.used_model is None
     assert calls["count"] == 2
     assert observed["session_kwargs"] == {"model": "text-model", "vision_model": "vision-model"}
+
+
+def test_adapter_records_used_model_when_sdk_reports_current_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeSession:
+        def __init__(self) -> None:
+            self.rpc = SimpleNamespace(model=SimpleNamespace(get_current=self._get_current))
+
+        async def _get_current(self):
+            return SimpleNamespace(model_id="gpt-5.4")
+
+        async def send_and_wait(self, prompt: str, attachments=None):
+            return SimpleNamespace(
+                data=SimpleNamespace(
+                    content='{"sheet_summary":"Summary","sections":[],"figures":[],"unknowns":[],"markdown":"# Sheet"}'
+                )
+            )
+
+    class FakeClient:
+        async def start(self) -> None:
+            return None
+
+        async def stop(self) -> None:
+            return None
+
+        async def create_session(self, **kwargs):
+            return FakeSession()
+
+    monkeypatch.setattr(
+        "excel_semantic_md.llm.adapter._import_copilot_sdk",
+        lambda: (FakeClient, SimpleNamespace(approve_all="approve-all")),
+    )
+
+    result = asyncio.run(GitHubCopilotSdkAdapter().run_sheet_async(_make_sheet(), None))
+
+    assert result.status == "succeeded"
+    assert result.used_model == "gpt-5.4"
 
 
 def test_adapter_fails_after_second_invalid_response(monkeypatch: pytest.MonkeyPatch) -> None:
