@@ -72,6 +72,13 @@ class LlmInput:
         }
 
 
+@dataclass(frozen=True)
+class LlmRequest:
+    attachments: list[LlmAttachment]
+    input: LlmInput
+    prompt: str
+
+
 @dataclass
 class LlmResponse:
     sheet_summary: str

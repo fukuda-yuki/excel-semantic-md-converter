@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import excel_semantic_md.cli.main as cli_main
+import excel_semantic_md.output.writers as output_writers
 import pytest
 
 from excel_semantic_md.app.convert_pipeline import run_convert_pipeline
@@ -326,6 +327,114 @@ def test_write_convert_outputs_does_not_rewrite_already_published_asset_path(tmp
     assert "![Chart](assets/sheet-001/s001-b001-chart-001.png)" in result_markdown
 
 
+def test_write_convert_outputs_redacts_absolute_paths_embedded_in_failure_details(tmp_path: Path) -> None:
+    local_path = r"C:\Users\Alice\My Documents\private book.xlsx"
+    temp_path = r"C:\Users\Alice\AppData\Local\Temp\excel-semantic-md-render-123\artifact.png"
+    sheet = SheetModel(
+        sheet_index=1,
+        name="PathLeak",
+        blocks=[],
+    )
+    convert_result = ConvertResult(
+        input_file_name="book.xlsx",
+        schema_version="phase1.0",
+        generated_at="2026-04-23T00:00:00+00:00",
+        command_options={
+            "model": None,
+            "vision_model": None,
+            "max_images_per_sheet": None,
+            "save_debug_json": False,
+            "save_render_artifacts": False,
+            "strict": False,
+        },
+        output_dir=tmp_path / "out",
+        workbook_extraction_payload={"schema_version": "phase1.0", "input_file_name": "book.xlsx", "sheets": []},
+        block_detection_payload={"schema_version": "phase1.0", "input_file_name": "book.xlsx", "sheets": []},
+        linked_workbook_payload={"schema_version": "phase1.0", "input_file_name": "book.xlsx", "sheets": []},
+        sheets=[
+            ConvertSheetResult(
+                sheet=sheet,
+                status="failed",
+                warnings=[
+                    WarningInfo(
+                        code="path_warning",
+                        message="Warning contains an exception string.",
+                        details={"error": f"failed while reading {local_path}", "temp_dir": temp_path},
+                    )
+                ],
+                failures=[
+                    FailureInfo(
+                        stage="render",
+                        message="Render failed.",
+                        details={"error": f"Excel failed on {local_path}", "workbook": local_path},
+                    )
+                ],
+            )
+        ],
+    )
+
+    output_files = write_convert_outputs(convert_result)
+    manifest_text = output_files.manifest_json.read_text(encoding="utf-8")
+    manifest = json.loads(manifest_text)
+
+    assert local_path not in manifest_text
+    assert temp_path not in manifest_text
+    assert manifest["sheets"][0]["warnings"][0]["details"]["error"] == "failed while reading [redacted]"
+    assert manifest["sheets"][0]["warnings"][0]["details"]["temp_dir"] == "[redacted]"
+    assert manifest["sheets"][0]["failures"][0]["details"]["error"] == "Excel failed on [redacted]"
+    assert manifest["sheets"][0]["failures"][0]["details"]["workbook"] == "[redacted]"
+
+
+def test_write_convert_outputs_restores_existing_outputs_when_publish_move_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_dir = tmp_path / "out"
+    (output_dir / "assets").mkdir(parents=True)
+    (output_dir / "debug").mkdir()
+    (output_dir / "result.md").write_text("old result\n", encoding="utf-8")
+    (output_dir / "manifest.json").write_text('{"old": true}\n', encoding="utf-8")
+    (output_dir / "assets" / "old.txt").write_text("old asset\n", encoding="utf-8")
+    (output_dir / "debug" / "old.json").write_text('{"old": true}\n', encoding="utf-8")
+
+    sheet = SheetModel(sheet_index=1, name="Restore", blocks=[])
+    convert_result = ConvertResult(
+        input_file_name="book.xlsx",
+        schema_version="phase1.0",
+        generated_at="2026-04-23T00:00:00+00:00",
+        command_options={
+            "model": None,
+            "vision_model": None,
+            "max_images_per_sheet": None,
+            "save_debug_json": False,
+            "save_render_artifacts": False,
+            "strict": False,
+        },
+        output_dir=output_dir,
+        workbook_extraction_payload={"schema_version": "phase1.0", "input_file_name": "book.xlsx", "sheets": []},
+        block_detection_payload={"schema_version": "phase1.0", "input_file_name": "book.xlsx", "sheets": []},
+        linked_workbook_payload={"schema_version": "phase1.0", "input_file_name": "book.xlsx", "sheets": []},
+        sheets=[ConvertSheetResult(sheet=sheet, status="succeeded", markdown="new result")],
+    )
+    real_move = output_writers.shutil.move
+
+    def guarded_move(src: str, dst: str):
+        source_path = Path(src)
+        if source_path.name == "manifest.json" and source_path.parent.name.startswith(".excel-semantic-md-staging-"):
+            raise RuntimeError("publish move failed")
+        return real_move(src, dst)
+
+    monkeypatch.setattr(output_writers.shutil, "move", guarded_move)
+
+    with pytest.raises(RuntimeError, match="publish move failed"):
+        write_convert_outputs(convert_result)
+
+    assert (output_dir / "result.md").read_text(encoding="utf-8") == "old result\n"
+    assert (output_dir / "manifest.json").read_text(encoding="utf-8") == '{"old": true}\n'
+    assert (output_dir / "assets" / "old.txt").read_text(encoding="utf-8") == "old asset\n"
+    assert (output_dir / "debug" / "old.json").read_text(encoding="utf-8") == '{"old": true}\n'
+
+
 def test_convert_command_writes_outputs_and_only_fails_in_strict_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     input_path = tmp_path / "book.xlsx"
     input_path.write_bytes(b"placeholder")
@@ -418,9 +527,10 @@ def test_convert_command_writes_outputs_and_only_fails_in_strict_mode(tmp_path: 
         )
 
     class FakeAdapter:
-        def run_sheet(self, sheet, render_result, *, options):
+        def run_sheet(self, sheet, render_result, *, options, request):
             assert render_result is not None
             assert options.model == "text-model"
+            assert request.input.sheet_name == sheet.name
             return LlmRunResult(
                 status="succeeded",
                 attempts=1,
@@ -480,6 +590,140 @@ def test_convert_command_writes_outputs_and_only_fails_in_strict_mode(tmp_path: 
     assert code == 1
     assert (strict_out / "result.md").is_file()
     assert (strict_out / "manifest.json").is_file()
+
+
+def test_run_convert_pipeline_uses_prepared_llm_request_for_debug_payload(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_path = tmp_path / "book.xlsx"
+    input_path.write_bytes(b"placeholder")
+    render_path = tmp_path / "render-prepared-request" / "sheet-001" / "range.png"
+    render_path.parent.mkdir(parents=True)
+    render_path.write_bytes(b"png")
+    observed: dict[str, object] = {}
+    sheet = SheetModel(
+        sheet_index=1,
+        name="PreparedRequest",
+        blocks=[
+            ParagraphBlock(
+                id="s001-b001-paragraph",
+                anchor=Rect(sheet="PreparedRequest", start_row=1, start_col=1, end_row=1, end_col=1, a1="A1"),
+                source=SourceKind.CELLS,
+                text="Paragraph",
+            )
+        ],
+    )
+    read_result = SimpleNamespace(
+        input_file_name="book.xlsx",
+        to_dict=lambda: {"schema_version": "phase1.0", "input_file_name": "book.xlsx", "sheets": []},
+    )
+    linked_workbook = SimpleNamespace(
+        schema_version="phase1.0",
+        input_file_name="book.xlsx",
+        sheets=[sheet],
+        to_dict=lambda: {"schema_version": "phase1.0", "input_file_name": "book.xlsx", "sheets": []},
+    )
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.read_workbook", lambda _path: read_result)
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.detect_blocks", lambda _read_result: linked_workbook)
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.read_visual_metadata", lambda _path: [])
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.link_visuals", lambda block_model, _visuals: block_model)
+    monkeypatch.setattr(
+        "excel_semantic_md.app.convert_pipeline.build_render_plan",
+        lambda _sheet, _visual_sheet, *, save_render_artifacts: (
+            [
+                RenderPlanItem(
+                    block=sheet.blocks[0],
+                    kind="range",
+                    role=SimpleNamespace(value="render_artifact"),
+                    source="range_copy_picture",
+                )
+            ],
+            [],
+            [],
+        ),
+    )
+    monkeypatch.setattr(
+        "excel_semantic_md.app.convert_pipeline.render_with_excel_com",
+        lambda *args, **kwargs: RenderSheetResult(
+            input_file_name="book.xlsx",
+            sheet_name="PreparedRequest",
+            temp_dir=str(tmp_path / "render-prepared-request"),
+            artifacts=[
+                RenderArtifact(
+                    block_id=sheet.blocks[0].id,
+                    visual_id=None,
+                    related_block_id=None,
+                    kind="range",
+                    role="render_artifact",
+                    path=str(render_path),
+                    source="range_copy_picture",
+                    anchor=sheet.blocks[0].anchor,
+                )
+            ],
+            warnings=[],
+            failures=[],
+        ),
+    )
+
+    class ObservingAdapter:
+        def run_sheet(self, _sheet, _render_result, *, options, request):
+            observed["options"] = options
+            observed["request_input"] = request.input.to_dict()
+            observed["request_attachments"] = [attachment.to_dict() for attachment in request.attachments]
+            observed["request_prompt"] = request.prompt
+            return LlmRunResult(
+                status="succeeded",
+                attempts=1,
+                response=LlmResponse(
+                    sheet_summary="Prepared",
+                    sections=[],
+                    figures=[],
+                    unknowns=[],
+                    markdown="Prepared markdown",
+                ),
+            )
+
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.GitHubCopilotSdkAdapter", ObservingAdapter)
+
+    result = run_convert_pipeline(
+        input_path,
+        tmp_path / "out",
+        command_options={
+            "model": None,
+            "vision_model": None,
+            "max_images_per_sheet": 1,
+            "save_debug_json": True,
+            "save_render_artifacts": False,
+            "strict": False,
+        },
+    )
+    output_files = write_convert_outputs(result)
+    debug_payload = json.loads((output_files.debug_dir / "llm_input.json").read_text(encoding="utf-8"))
+
+    assert result.sheets[0].llm_input_payload == observed["request_input"]
+    assert debug_payload["sheets"][0]["input"] == observed["request_input"]
+    assert observed["request_attachments"] == [
+        {
+            "path": str(render_path.resolve()),
+            "block_id": "s001-b001-paragraph",
+            "related_block_id": None,
+            "kind": "range",
+            "source": "range_copy_picture",
+            "priority": 2,
+        }
+    ]
+    assert debug_payload["sheets"][0]["input"]["assets"] == [
+        {
+            "path": "range.png",
+            "block_id": "s001-b001-paragraph",
+            "related_block_id": None,
+            "kind": "range",
+            "source": "range_copy_picture",
+            "priority": 2,
+        }
+    ]
+    assert "PreparedRequest" in observed["request_prompt"]
 
 
 def test_run_convert_pipeline_normalizes_render_exception_to_failed_sheet(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

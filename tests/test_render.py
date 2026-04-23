@@ -9,11 +9,12 @@ from types import SimpleNamespace
 from unittest import mock
 
 import excel_semantic_md.cli.main as cli_main
+import pytest
 from excel_semantic_md.excel import detect_blocks, link_visuals, read_visual_metadata, read_workbook
 from excel_semantic_md.models import AssetRole, ChartBlock, ParagraphBlock, Rect, SourceKind
 from excel_semantic_md.render.excel_com_renderer import ExcelSession, render_with_excel_com
 from excel_semantic_md.render.planner import build_render_plan
-from excel_semantic_md.render.types import RenderPlanItem
+from excel_semantic_md.render.types import RenderArtifact, RenderPlanItem, RenderSheetResult
 
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "visuals"
@@ -121,6 +122,22 @@ def test_excel_session_cleans_up_when_workbook_open_fails() -> None:
     assert pythoncom.CoUninitialize.call_count == 1
 
 
+def test_excel_session_fails_closed_for_xlsm_when_macro_security_cannot_be_set() -> None:
+    pythoncom = SimpleNamespace(CoInitialize=mock.Mock(), CoUninitialize=mock.Mock())
+    app = _automation_security_failing_app()
+    win32_client = SimpleNamespace(DispatchEx=mock.Mock(return_value=app))
+
+    session = ExcelSession(FIXTURES / "image-visual.xlsm")
+    with mock.patch("excel_semantic_md.render.excel_com_renderer._load_excel_com_modules", return_value=(pythoncom, win32_client)):
+        with pytest.raises(RuntimeError, match="macro-disabled"):
+            session.__enter__()
+
+    assert app.Workbooks.Open.call_count == 0
+    assert app.Quit.call_count == 1
+    assert pythoncom.CoInitialize.call_count == 1
+    assert pythoncom.CoUninitialize.call_count == 1
+
+
 def test_excel_session_sets_macro_disabled_and_reports_cleanup_failures() -> None:
     pythoncom = SimpleNamespace(CoInitialize=mock.Mock(), CoUninitialize=mock.Mock())
     workbook = SimpleNamespace(Close=mock.Mock(side_effect=RuntimeError("close failed")))
@@ -146,6 +163,7 @@ def test_excel_session_sets_macro_disabled_and_reports_cleanup_failures() -> Non
     assert pythoncom.CoUninitialize.call_count == 1
     warning_codes = [warning.code for warning in session.cleanup_warnings]
     assert warning_codes == ["excel_workbook_close_failed", "excel_application_quit_failed"]
+    assert [warning.details["workbook"] for warning in session.cleanup_warnings] == ["image-visual.xlsm", "image-visual.xlsm"]
 
 
 def test_render_with_excel_com_executes_chart_export_and_original_image_copy() -> None:
@@ -215,6 +233,56 @@ def test_render_with_excel_com_executes_chart_export_and_original_image_copy() -
         shutil.rmtree(result.temp_dir, ignore_errors=True)
 
 
+def test_render_with_excel_com_failure_details_do_not_include_absolute_artifact_path() -> None:
+    chart_block = ChartBlock(
+        id="s001-b001-chart",
+        anchor=Rect(sheet="Chart", start_row=2, start_col=4, end_row=2, end_col=4, a1="D2"),
+        source=SourceKind.CHART,
+        visual_id="s001-v001-chart",
+        title="Quarterly Sales",
+    )
+    plan_item = RenderPlanItem(block=chart_block, kind="chart", role=AssetRole.MARKDOWN, source="chart_export")
+    chart_object = SimpleNamespace(
+        TopLeftCell=SimpleNamespace(Row=2, Column=4),
+        BottomRightCell=SimpleNamespace(Row=2, Column=4),
+        Chart=SimpleNamespace(
+            HasTitle=True,
+            ChartTitle=SimpleNamespace(Text="Quarterly Sales"),
+            Export=mock.Mock(return_value=False),
+        ),
+    )
+    worksheet = SimpleNamespace(
+        ChartObjects=mock.Mock(return_value=[chart_object]),
+        Shapes=[],
+    )
+    session = mock.MagicMock()
+    session.__enter__.return_value = session
+    session.__exit__.return_value = None
+    session.worksheet.return_value = worksheet
+    session.cleanup_warnings = []
+
+    with (
+        mock.patch("excel_semantic_md.render.excel_com_renderer.excel_com_diagnostic", return_value=(True, "ok")),
+        mock.patch("excel_semantic_md.render.excel_com_renderer.ExcelSession", return_value=session),
+    ):
+        result = render_with_excel_com(
+            FIXTURES / "chart-visual.xlsx",
+            input_file_name="chart-visual.xlsx",
+            sheet_name="Chart",
+            plan_items=[plan_item],
+            warnings=[],
+            failures=[],
+        )
+
+    try:
+        failure_path = result.failures[0].details["path"]
+        assert failure_path.endswith(".png")
+        assert "\\" not in failure_path
+        assert "/" not in failure_path
+    finally:
+        shutil.rmtree(result.temp_dir, ignore_errors=True)
+
+
 def test_render_with_excel_com_records_ambiguous_shape_match_as_failure() -> None:
     shape_one = _shape_candidate("Quarterly callout", "Logo", 2, 2, 4, 4)
     shape_two = _shape_candidate("Quarterly callout", "Logo", 2, 2, 4, 4)
@@ -269,6 +337,82 @@ def test_render_command_outputs_json_when_rendering_cannot_run(monkeypatch) -> N
     shutil.rmtree(payload["temp_dir"], ignore_errors=True)
 
 
+def test_render_command_success_outputs_contract_without_convert_outputs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    artifact_path = (tmp_path / "rendered-range.png").resolve()
+
+    def fake_render_with_excel_com(
+        _input_path: Path,
+        *,
+        input_file_name: str,
+        sheet_name: str,
+        plan_items: list[RenderPlanItem],
+        warnings,
+        failures,
+    ) -> RenderSheetResult:
+        temp_dir = artifact_path.parent
+        artifact_path.write_bytes(b"png")
+        return RenderSheetResult(
+            input_file_name=input_file_name,
+            sheet_name=sheet_name,
+            temp_dir=str(temp_dir),
+            artifacts=[
+                RenderArtifact(
+                    block_id=plan_items[0].block.id,
+                    visual_id=None,
+                    related_block_id=None,
+                    kind="range",
+                    role="render_artifact",
+                    path=str(artifact_path),
+                    source="range_copy_picture",
+                    anchor=plan_items[0].block.anchor,
+                )
+            ],
+            warnings=list(warnings),
+            failures=list(failures),
+        )
+
+    monkeypatch.setattr("excel_semantic_md.render.render_with_excel_com", fake_render_with_excel_com)
+    monkeypatch.setattr(
+        "excel_semantic_md.llm.adapter.GitHubCopilotSdkAdapter.run_sheet",
+        mock.Mock(side_effect=AssertionError("render must not invoke LLM")),
+    )
+
+    code, stdout, stderr = _run_cli(["render", "--input", str(FIXTURES / "no-visuals.xlsx"), "--sheet", "Plain"])
+    payload = json.loads(stdout)
+
+    try:
+        assert code == 0
+        assert stderr == ""
+        assert set(payload) >= {"input_file_name", "sheet_name", "temp_dir", "artifacts", "warnings", "failures"}
+        assert payload["artifacts"] == [
+            {
+                "block_id": "s001-b001-paragraph",
+                "visual_id": None,
+                "related_block_id": None,
+                "kind": "range",
+                "role": "render_artifact",
+                "path": str(artifact_path),
+                "source": "range_copy_picture",
+                "anchor": {
+                    "sheet": "Plain",
+                    "start_row": 1,
+                    "start_col": 1,
+                    "end_row": 1,
+                    "end_col": 1,
+                    "a1": "A1",
+                },
+            }
+        ]
+        assert payload["failures"] == []
+        assert not (Path(payload["temp_dir"]) / "result.md").exists()
+        assert not (Path(payload["temp_dir"]) / "manifest.json").exists()
+    finally:
+        artifact_path.unlink(missing_ok=True)
+
+
 def test_render_command_rejects_unknown_sheet_name() -> None:
     code, _stdout, stderr = _run_cli(["render", "--input", str(FIXTURES / "no-visuals.xlsx"), "--sheet", "Missing"])
 
@@ -291,3 +435,21 @@ def _shape_candidate(text: str, alt_text: str, start_row: int, start_col: int, e
         Width=120,
         Height=80,
     )
+
+
+def _automation_security_failing_app():
+    class App:
+        def __init__(self) -> None:
+            object.__setattr__(self, "Visible", True)
+            object.__setattr__(self, "DisplayAlerts", True)
+            object.__setattr__(self, "AutomationSecurity", 1)
+            object.__setattr__(self, "Workbooks", SimpleNamespace(Open=mock.Mock()))
+            object.__setattr__(self, "Quit", mock.Mock())
+            object.__setattr__(self, "_fail_automation_security", True)
+
+        def __setattr__(self, name: str, value) -> None:
+            if name == "AutomationSecurity" and getattr(self, "_fail_automation_security", False):
+                raise RuntimeError("automation security failed")
+            object.__setattr__(self, name, value)
+
+    return App()

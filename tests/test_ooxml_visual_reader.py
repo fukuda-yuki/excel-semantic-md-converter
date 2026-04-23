@@ -3,13 +3,19 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import zipfile
 from pathlib import Path
+from xml.etree import ElementTree
 
 import excel_semantic_md.cli.main as cli_main
 from excel_semantic_md.excel import read_visual_metadata
 
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "visuals"
+MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+PKG_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
+CONTENT_TYPES_NS = "http://schemas.openxmlformats.org/package/2006/content-types"
 
 
 def _run_cli(argv: list[str]) -> tuple[int | str | None, str, str]:
@@ -161,6 +167,23 @@ def test_read_visual_metadata_keeps_sheet_successful_when_drawing_target_is_miss
     ]
 
 
+def test_read_visual_metadata_keeps_sheet_successful_when_drawing_xml_is_malformed(tmp_path: Path) -> None:
+    workbook_path = tmp_path / "malformed-drawing.xlsx"
+    _copy_workbook_with_replaced_part(
+        FIXTURES / "image-visual.xlsx",
+        workbook_path,
+        "xl/drawings/drawing1.xml",
+        b"<xdr:wsDr><xdr:oneCellAnchor>",
+    )
+
+    sheet = read_visual_metadata(workbook_path)[0]
+
+    assert sheet.visuals == []
+    assert [warning.code for warning in sheet.warnings] == ["drawing_part_parse_failed"]
+    assert sheet.warnings[0].details["sheet"] == "Image"
+    assert sheet.warnings[0].details["drawing_part"] == "xl/drawings/drawing1.xml"
+
+
 def test_read_visual_metadata_supports_xlsm_without_executing_macros() -> None:
     sheet = read_visual_metadata(FIXTURES / "image-visual.xlsm")[0]
     visual = sheet.visuals[0].to_dict()
@@ -185,6 +208,41 @@ def test_inspect_includes_visuals_and_visual_warnings() -> None:
             "details": {"sheet": "Broken", "drawing_part": "xl/drawings/missing-drawing.xml"},
         }
     ]
+
+
+def test_inspect_succeeds_when_drawing_xml_is_malformed(tmp_path: Path) -> None:
+    workbook_path = tmp_path / "malformed-drawing.xlsx"
+    _copy_workbook_with_replaced_part(
+        FIXTURES / "image-visual.xlsx",
+        workbook_path,
+        "xl/drawings/drawing1.xml",
+        b"<xdr:wsDr><xdr:oneCellAnchor>",
+    )
+
+    code, stdout, stderr = _run_cli(["inspect", "--input", str(workbook_path)])
+    payload = json.loads(stdout)
+
+    assert code == 0
+    assert stderr == ""
+    assert payload["sheets"][0]["visuals"] == []
+    assert payload["sheets"][0]["warnings"][0]["code"] == "drawing_part_parse_failed"
+
+
+def test_malformed_drawing_warning_does_not_stop_following_sheets(tmp_path: Path) -> None:
+    workbook_path = tmp_path / "malformed-drawing-multi-sheet.xlsx"
+    _copy_workbook_with_replaced_part_and_empty_second_sheet(
+        FIXTURES / "image-visual.xlsx",
+        workbook_path,
+        "xl/drawings/drawing1.xml",
+        b"<xdr:wsDr><xdr:oneCellAnchor>",
+    )
+
+    sheets = read_visual_metadata(workbook_path)
+
+    assert [sheet.name for sheet in sheets] == ["Image", "Second"]
+    assert [warning.code for warning in sheets[0].warnings] == ["drawing_part_parse_failed"]
+    assert sheets[1].visuals == []
+    assert sheets[1].warnings == []
 
 
 def test_inspect_includes_visual_metadata_and_linked_visual_blocks() -> None:
@@ -261,3 +319,73 @@ def test_inspect_includes_visual_metadata_and_linked_visual_blocks() -> None:
             "alt_text": "Company logo",
         }
     ]
+
+
+def _copy_workbook_with_replaced_part(source: Path, target: Path, part_name: str, payload: bytes) -> None:
+    with zipfile.ZipFile(source) as source_archive, zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as target_archive:
+        for item in source_archive.infolist():
+            target_archive.writestr(item, payload if item.filename == part_name else source_archive.read(item.filename))
+
+
+def _copy_workbook_with_replaced_part_and_empty_second_sheet(source: Path, target: Path, part_name: str, payload: bytes) -> None:
+    with zipfile.ZipFile(source) as source_archive, zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as target_archive:
+        for item in source_archive.infolist():
+            data = source_archive.read(item.filename)
+            if item.filename == part_name:
+                data = payload
+            elif item.filename == "xl/workbook.xml":
+                data = _workbook_with_second_sheet(data)
+            elif item.filename == "xl/_rels/workbook.xml.rels":
+                data = _workbook_relationships_with_second_sheet(data)
+            elif item.filename == "[Content_Types].xml":
+                data = _content_types_with_second_sheet(data)
+            target_archive.writestr(item, data)
+        target_archive.writestr(
+            "xl/worksheets/sheet2.xml",
+            (
+                f'<worksheet xmlns="{MAIN_NS}">'
+                "<sheetData>"
+                '<row r="1"><c r="A1" t="inlineStr"><is><t>Second sheet</t></is></c></row>'
+                "</sheetData>"
+                "</worksheet>"
+            ),
+        )
+
+
+def _workbook_with_second_sheet(payload: bytes) -> bytes:
+    root = ElementTree.fromstring(payload)
+    sheets_node = root.find(f"{{{MAIN_NS}}}sheets")
+    assert sheets_node is not None
+    ElementTree.SubElement(
+        sheets_node,
+        f"{{{MAIN_NS}}}sheet",
+        {"name": "Second", "sheetId": "2", f"{{{REL_NS}}}id": "rIdSecond"},
+    )
+    return ElementTree.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
+def _workbook_relationships_with_second_sheet(payload: bytes) -> bytes:
+    root = ElementTree.fromstring(payload)
+    ElementTree.SubElement(
+        root,
+        f"{{{PKG_REL_NS}}}Relationship",
+        {
+            "Id": "rIdSecond",
+            "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
+            "Target": "worksheets/sheet2.xml",
+        },
+    )
+    return ElementTree.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
+def _content_types_with_second_sheet(payload: bytes) -> bytes:
+    root = ElementTree.fromstring(payload)
+    ElementTree.SubElement(
+        root,
+        f"{{{CONTENT_TYPES_NS}}}Override",
+        {
+            "PartName": "/xl/worksheets/sheet2.xml",
+            "ContentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
+        },
+    )
+    return ElementTree.tostring(root, encoding="utf-8", xml_declaration=True)

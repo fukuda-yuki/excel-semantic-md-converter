@@ -7,7 +7,8 @@ from pathlib import Path
 from excel_semantic_md.models import SheetModel
 from excel_semantic_md.render.types import RenderArtifact, RenderSheetResult
 
-from excel_semantic_md.llm.models import LlmAttachment, LlmInput
+from excel_semantic_md.llm.models import LlmAttachment, LlmInput, LlmRequest, LlmRunOptions
+from excel_semantic_md.llm.prompt import build_sheet_prompt
 
 
 def build_llm_attachments(
@@ -41,6 +42,26 @@ def build_llm_input(sheet: SheetModel, attachments: list[LlmAttachment]) -> LlmI
             "style": "semantic",
             "preserveUnknowns": True,
         },
+    )
+
+
+def build_llm_request(
+    sheet: SheetModel,
+    render_result: RenderSheetResult | None,
+    *,
+    options: LlmRunOptions | None = None,
+) -> LlmRequest:
+    run_options = options or LlmRunOptions()
+    attachments = build_llm_attachments(
+        sheet,
+        render_result,
+        max_images_per_sheet=run_options.max_images_per_sheet,
+    )
+    llm_input = build_llm_input(sheet, attachments)
+    return LlmRequest(
+        attachments=attachments,
+        input=llm_input,
+        prompt=build_sheet_prompt(llm_input),
     )
 
 

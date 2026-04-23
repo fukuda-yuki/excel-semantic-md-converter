@@ -5,10 +5,9 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from excel_semantic_md.llm.builders import build_llm_attachments, build_llm_input
-from excel_semantic_md.llm.models import LlmRunOptions, LlmRunResult
+from excel_semantic_md.llm.builders import build_llm_request
+from excel_semantic_md.llm.models import LlmRequest, LlmRunOptions, LlmRunResult
 from excel_semantic_md.llm.parser import parse_llm_response
-from excel_semantic_md.llm.prompt import build_sheet_prompt
 from excel_semantic_md.models import FailureInfo, SheetModel
 from excel_semantic_md.render.types import RenderSheetResult
 
@@ -22,15 +21,10 @@ class GitHubCopilotSdkAdapter:
         render_result: RenderSheetResult | None,
         *,
         options: LlmRunOptions | None = None,
+        request: LlmRequest | None = None,
     ) -> LlmRunResult:
         run_options = options or LlmRunOptions()
-        attachments = build_llm_attachments(
-            sheet,
-            render_result,
-            max_images_per_sheet=run_options.max_images_per_sheet,
-        )
-        llm_input = build_llm_input(sheet, attachments)
-        prompt = build_sheet_prompt(llm_input)
+        llm_request = request or build_llm_request(sheet, render_result, options=run_options)
         result: LlmRunResult | None = None
         client: Any | None = None
 
@@ -54,12 +48,12 @@ class GitHubCopilotSdkAdapter:
         try:
             session = await client.create_session(**_build_session_kwargs(run_options, permission_handler))
             used_model = await _get_used_model(session)
-            attachment_payload = [_attachment_payload(item) for item in attachments]
+            attachment_payload = [_attachment_payload(item) for item in llm_request.attachments]
 
             last_error: ValueError | None = None
             for _ in range(2):
                 attempts += 1
-                response = await _send_and_wait(session, prompt, attachment_payload)
+                response = await _send_and_wait(session, llm_request.prompt, attachment_payload)
                 response_text = _extract_response_text(response)
                 try:
                     parsed = parse_llm_response(response_text)
@@ -106,8 +100,9 @@ class GitHubCopilotSdkAdapter:
         render_result: RenderSheetResult | None,
         *,
         options: LlmRunOptions | None = None,
+        request: LlmRequest | None = None,
     ) -> LlmRunResult:
-        return asyncio.run(self.run_sheet_async(sheet, render_result, options=options))
+        return asyncio.run(self.run_sheet_async(sheet, render_result, options=options, request=request))
 
 
 def _import_copilot_sdk() -> tuple[type[Any], Any]:

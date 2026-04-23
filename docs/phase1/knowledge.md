@@ -219,3 +219,14 @@ README は背景・全体像・初期構想の参考資料として扱う。
 - editable install で生成される `excel-semantic-md.exe` は `C:\Users\mwam0\AppData\Roaming\Python\Python314\Scripts` に存在するが、この shell の `PATH` には含まれていない。
 - sheet pipeline 内の未捕捉例外は、可能な限り sheet-level `FailureInfo` に正規化して他 sheet 継続と output writer 到達を優先する。
 - `manifest.json` の sheet-level `llm` payload には、Copilot SDK から current model を取得できた場合だけ `used_model` を含める。
+
+## 19. phase1-requirements-implementation-review 対応メモ
+
+2026-04-23 の `phase1-requirements-implementation-review` 対応では、既存仕様を変更せず、受理済みレビュー指摘のうち仕様安全性・公開出力契約・回帰防止に関わる項目だけを修正した。
+
+- `.xlsm` の Excel COM rendering は、`AutomationSecurity = 3` を設定できない場合に workbook を開かず fail closed とする。`.xlsx` は従来どおり best effort のまま扱う。
+- `manifest.json` の warning / failure details は、キー名が `path` でない例外文字列でもローカル絶対パスを redacted にする。通常 manifest に temp dir や workbook 絶対パスを漏らさない方針を補強した。
+- managed output replacement は、既存出力を backup へ退避してから staging 出力を移動し、公開移動に失敗した場合は新規移動済み出力を削除して旧出力を復元する。
+- LLM request は `build_llm_request()` で attachments、LLM input、prompt を一括生成する。`convert` の debug 用 `llm_input_payload` と `GitHubCopilotSdkAdapter` の実送信用 prompt / attachments は同じ request 由来にする。
+- workbook read -> block detection -> visual metadata -> linking の重複統合は今回は見送った。仕様不一致ではなく保守性改善であり、今回の安全性修正に混ぜると過剰リファクタになるため。
+- 自動テストは `python -m pytest -q` で `95 passed`。Copilot SDK local CLI behavior、vision attachment behavior、実 Excel COM、実 `.xlsm` macro-disabled behavior は引き続き live confirmation 対象である。

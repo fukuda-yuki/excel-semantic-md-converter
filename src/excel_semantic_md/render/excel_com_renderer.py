@@ -53,8 +53,11 @@ class ExcelSession:
             self._previous_automation_security = getattr(self.app, "AutomationSecurity", None)
             try:
                 self.app.AutomationSecurity = 3
-            except Exception:
-                pass
+            except Exception as exc:
+                if self.workbook_path.suffix.lower() == ".xlsm":
+                    raise RuntimeError(
+                        "Failed to force Excel macro-disabled automation security for .xlsm workbook."
+                    ) from exc
             self.workbook = self.app.Workbooks.Open(
                 str(self.workbook_path),
                 UpdateLinks=0,
@@ -88,7 +91,7 @@ class ExcelSession:
                     WarningInfo(
                         code="excel_workbook_close_failed",
                         message="Excel workbook cleanup failed after rendering.",
-                        details={"error": str(close_exc), "workbook": str(self.workbook_path)},
+                        details={"error": str(close_exc), "workbook": self.workbook_path.name},
                     )
                 )
         if self.app is not None:
@@ -99,7 +102,7 @@ class ExcelSession:
                     WarningInfo(
                         code="excel_application_quit_failed",
                         message="Excel application cleanup failed after rendering.",
-                        details={"error": str(quit_exc), "workbook": str(self.workbook_path)},
+                        details={"error": str(quit_exc), "workbook": self.workbook_path.name},
                     )
                 )
         if self._pythoncom is not None and self._com_initialized:
@@ -225,7 +228,7 @@ def _render_plan_item(
         if exported is False:
             raise RenderTaskError(
                 "Chart.Export returned False.",
-                details={"block_id": item.block.id, "path": str(output_path)},
+                details={"block_id": item.block.id, "path": output_path.name},
             )
     elif item.kind in {"shape", "image"}:
         shape = _match_shape_object(worksheet, item)
@@ -266,7 +269,7 @@ def _copy_package_part(workbook_path: Path, target_part: str | None, output_path
     if target_part is None:
         raise RenderTaskError(
             "Original image asset copy is missing an OOXML target part.",
-            details={"path": str(output_path)},
+            details={"path": output_path.name},
         )
     with zipfile.ZipFile(workbook_path) as archive:
         try:
@@ -274,7 +277,7 @@ def _copy_package_part(workbook_path: Path, target_part: str | None, output_path
         except KeyError as exc:
             raise RenderTaskError(
                 "Original image asset part was not found in the workbook package.",
-                details={"target_part": target_part, "path": str(output_path)},
+                details={"target_part": target_part, "path": output_path.name},
             ) from exc
     output_path.write_bytes(payload)
 
@@ -288,7 +291,7 @@ def _copy_object_to_png(worksheet: Any, excel_object: Any, output_path: Path) ->
         if exported is False:
             raise RenderTaskError(
                 "Clipboard picture export returned False.",
-                details={"path": str(output_path)},
+                details={"path": output_path.name},
             )
     finally:
         try:

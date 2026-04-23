@@ -9,7 +9,7 @@ from typing import Any
 
 from excel_semantic_md.excel import detect_blocks, link_visuals, read_visual_metadata, read_workbook
 from excel_semantic_md.excel.ooxml_visual_reader import SheetVisualResult
-from excel_semantic_md.llm import GitHubCopilotSdkAdapter, LlmRunOptions, build_llm_attachments, build_llm_input
+from excel_semantic_md.llm import GitHubCopilotSdkAdapter, LlmRunOptions, build_llm_request
 from excel_semantic_md.llm.models import LlmResponse, LlmRunResult
 from excel_semantic_md.models import FailureInfo, SheetModel, WarningInfo
 from excel_semantic_md.output.models import ConvertResult, ConvertSheetResult
@@ -143,8 +143,13 @@ def _run_sheet_pipeline(
 
             if not failures and not plan_items and not linked_sheet.blocks:
                 stage = "llm_input"
-                llm_input = build_llm_input(linked_sheet, [])
-                llm_input_payload = llm_input.to_dict()
+                llm_options = LlmRunOptions(
+                    model=command_options.get("model"),
+                    vision_model=command_options.get("vision_model"),
+                    max_images_per_sheet=command_options.get("max_images_per_sheet"),
+                )
+                llm_request = build_llm_request(linked_sheet, None, options=llm_options)
+                llm_input_payload = llm_request.input.to_dict()
                 llm_result = LlmRunResult(
                     status="succeeded",
                     attempts=1,
@@ -183,23 +188,20 @@ def _run_sheet_pipeline(
 
                 if not failures:
                     stage = "llm_input"
-                    attachments = build_llm_attachments(
-                        linked_sheet,
-                        render_result,
+                    llm_options = LlmRunOptions(
+                        model=command_options.get("model"),
+                        vision_model=command_options.get("vision_model"),
                         max_images_per_sheet=command_options.get("max_images_per_sheet"),
                     )
-                    llm_input = build_llm_input(linked_sheet, attachments)
-                    llm_input_payload = llm_input.to_dict()
+                    llm_request = build_llm_request(linked_sheet, render_result, options=llm_options)
+                    llm_input_payload = llm_request.input.to_dict()
                     try:
                         stage = "llm"
                         llm_result = llm_adapter.run_sheet(
                             linked_sheet,
                             render_result,
-                            options=LlmRunOptions(
-                                model=command_options.get("model"),
-                                vision_model=command_options.get("vision_model"),
-                                max_images_per_sheet=command_options.get("max_images_per_sheet"),
-                            ),
+                            options=llm_options,
+                            request=llm_request,
                         )
                     except Exception as exc:
                         failures.append(

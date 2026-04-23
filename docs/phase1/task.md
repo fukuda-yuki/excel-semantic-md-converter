@@ -283,3 +283,16 @@ Phase 1 では `resume` / session persistence を実装しない。
 - [x] Excel COM cleanup の失敗リスクを確認する。
 - [x] `.xlsm` マクロ無効契約を確認する。
 - [x] generated runtime outputs や private workbook を commit していないことを確認する。
+
+## 16. phase1-requirements-implementation-review 対応
+
+- [x] `.xlsm` rendering で `AutomationSecurity = 3` を設定できない場合に workbook を開かず fail closed にする。
+- [x] `manifest.json` の warning / failure details に含まれるローカル絶対パスを redacted にする。
+- [x] managed output 置換失敗時に既存 `result.md` / `manifest.json` / `assets/` / `debug/` を復元する。
+- [x] LLM request を 1 つの builder で作成し、debug 用 LLM input と adapter 送信用 prompt / attachments の source を揃える。
+- [x] `render` CLI success path の stdout JSON contract、非 convert 出力、LLM 非呼び出しを自動テストで確認する。
+- [x] malformed drawing XML が sheet warning になり `inspect` が成功することを自動テストで確認する。
+- [x] `python -m pytest -q` で全体テストを確認する。
+- [ ] Copilot SDK local CLI behavior を live confirmation で確認する。
+- [ ] vision attachment behavior を live confirmation で確認する。
+- [ ] 実 Excel COM による `.xlsm` macro-disabled behavior を live confirmation で確認する。

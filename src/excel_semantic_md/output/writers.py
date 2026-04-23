@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import tempfile
 from collections import defaultdict
@@ -11,6 +12,15 @@ from typing import Any
 
 from excel_semantic_md.models import AssetKind, Block, ChartBlock, ImageBlock, ShapeBlock, make_asset_path
 from excel_semantic_md.output.models import ConvertOutputFiles, ConvertResult, ConvertSheetResult, PublishedAsset
+
+_MANAGED_OUTPUT_NAMES = ("assets", "debug", "result.md", "manifest.json")
+_PATH_EXTENSIONS = r"(?:xlsx|xlsm|xls|png|jpg|jpeg|gif|json|md|xml|tmp|log|bin)"
+_WINDOWS_FILE_PATH_RE = re.compile(rf"(?<![\w])(?:[A-Za-z]:[\\/][^\"'\r\n<>|]*?\.{_PATH_EXTENSIONS})", re.IGNORECASE)
+_UNC_FILE_PATH_RE = re.compile(rf"(?<![\w])(?:\\\\[^\"'\r\n<>|]*?\.{_PATH_EXTENSIONS})", re.IGNORECASE)
+_POSIX_FILE_PATH_RE = re.compile(rf"(?<![\w])/(?:[^\"'\r\n<>|]*?/)*[^\"'\r\n<>|]*?\.{_PATH_EXTENSIONS}", re.IGNORECASE)
+_WINDOWS_ABSOLUTE_PATH_RE = re.compile(r"(?<![\w])(?:[A-Za-z]:[\\/][^\s\"'\r\n<>|]+)")
+_UNC_ABSOLUTE_PATH_RE = re.compile(r"(?<![\w])(?:\\\\[^\s\"'\r\n<>|]+)")
+_POSIX_ABSOLUTE_PATH_RE = re.compile(r"(?<![\w])/[^\s\"'\r\n<>|]+")
 
 
 def write_convert_outputs(result: ConvertResult) -> ConvertOutputFiles:
@@ -356,20 +366,49 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def _replace_managed_outputs(staging_dir: Path, output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    for managed_path in (
-        output_dir / "assets",
-        output_dir / "debug",
-        output_dir / "result.md",
-        output_dir / "manifest.json",
-    ):
-        if managed_path.is_dir():
-            shutil.rmtree(managed_path)
-        elif managed_path.exists():
-            managed_path.unlink()
+    backup_dir = Path(
+        tempfile.mkdtemp(
+            prefix=".excel-semantic-md-backup-",
+            dir=str(output_dir.parent.resolve()),
+        )
+    )
+    backed_up: list[tuple[Path, Path]] = []
+    moved_targets: list[Path] = []
 
-    for item in staging_dir.iterdir():
-        shutil.move(str(item), str(output_dir / item.name))
-    staging_dir.rmdir()
+    try:
+        for name in _MANAGED_OUTPUT_NAMES:
+            managed_path = output_dir / name
+            if not managed_path.exists():
+                continue
+            backup_path = backup_dir / name
+            shutil.move(str(managed_path), str(backup_path))
+            backed_up.append((managed_path, backup_path))
+
+        for item in staging_dir.iterdir():
+            target_path = output_dir / item.name
+            shutil.move(str(item), str(target_path))
+            moved_targets.append(target_path)
+    except Exception:
+        _remove_paths(moved_targets)
+        for original_path, backup_path in reversed(backed_up):
+            if backup_path.exists():
+                if original_path.exists():
+                    _remove_paths([original_path])
+                shutil.move(str(backup_path), str(original_path))
+        if backup_dir.exists() and not any(backup_dir.iterdir()):
+            backup_dir.rmdir()
+        raise
+    else:
+        shutil.rmtree(backup_dir, ignore_errors=True)
+        staging_dir.rmdir()
+
+
+def _remove_paths(paths: list[Path]) -> None:
+    for path in reversed(paths):
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+        elif path.exists():
+            path.unlink()
 
 
 def _warning_payload(warning: Any) -> dict[str, Any]:
@@ -412,9 +451,19 @@ def _sanitize_details(value: Any, *, key: str | None = None) -> Any:
     if isinstance(value, str):
         if key in {"path", "workbook", "temp_dir"} and _looks_local_path(value):
             return "[redacted]"
+        value = _redact_local_path_substrings(value)
         if "excel-semantic-md-render-" in value or "excel-semantic-md-staging-" in value:
             return "[redacted]"
     return value
+
+
+def _redact_local_path_substrings(value: str) -> str:
+    redacted = _WINDOWS_FILE_PATH_RE.sub("[redacted]", value)
+    redacted = _UNC_FILE_PATH_RE.sub("[redacted]", redacted)
+    redacted = _POSIX_FILE_PATH_RE.sub("[redacted]", redacted)
+    redacted = _WINDOWS_ABSOLUTE_PATH_RE.sub("[redacted]", redacted)
+    redacted = _UNC_ABSOLUTE_PATH_RE.sub("[redacted]", redacted)
+    return _POSIX_ABSOLUTE_PATH_RE.sub("[redacted]", redacted)
 
 
 def _looks_local_path(value: str) -> bool:
