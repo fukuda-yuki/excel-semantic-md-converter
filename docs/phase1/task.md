@@ -306,3 +306,14 @@ Phase 1 では `resume` / session persistence を実装しない。
 - [x] OOXML image original asset を `image/*` content-type allowlist で制限し、非 image target は warning-and-skip にした。
 - [x] `render` CLI の unexpected exception を JSON failure に正規化し、artifact 単位の通常例外でも後続 render を継続する。
 - [x] `number_format` の conservative subset として currency / grouping / fixed decimals の表示値文字列化を追加した。
+
+## 18. 2026-04-24 Requirements/Implementation Re-review After Fix Batch 対応
+
+- [x] 通常 `convert` で text shape の `shape_copy_picture` 必須依存を外し、抽出済み text を優先して LLM へ進める。
+- [x] 通常 `convert` で trusted OOXML image original asset を Excel COM なしで copy / attach できるようにする。
+- [x] table-only sheet が Excel COM を使わずに LLM へ進む regression test を追加する。
+- [x] OOXML image missing target / missing part を warning-and-skip として確認する regression test を追加する。
+- [x] filter visibility の Phase 1 契約を、OOXML 保存済み hidden row / column 状態を根拠にする範囲へ明確化する。
+- [x] visual metadata の定義済み `source` / `asset_candidate` / chart series fields を null 付き stable schema として出力する。
+- [x] visible block が無い empty sheet は LLM provider success と区別できる skipped 状態として扱う。
+- [x] managed output backup cleanup failure を warning として surface する。

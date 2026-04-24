@@ -530,3 +530,391 @@ Rejected or downgraded findings:
   - Copilot SDK local CLI behavior
   - vision attachment behavior
 - Keep pre-processing deduplication across `convert` / `inspect` / `render` as a later refactor, not part of this fix batch.
+
+## 2026-04-24 Requirements/Implementation Re-review After Fix Batch
+
+### Review Scope
+
+- Milestone: `phase1-requirements-implementation-review`
+- Scope: 要件定義をもとにした current Phase 1 仕様・実装・テストの再レビュー
+- Reviewed areas:
+  - `docs/phase1/spec.md`
+  - `docs/phase1/task.md`
+  - `docs/phase1/knowledge.md`
+  - `src/excel_semantic_md/**`
+  - `tests/**`
+  - `skills/excel-semantic-markdown/**`
+- Out of scope: code fixes, spec fixes, task checklist updates, live confirmation
+- Source of Truth: `docs/phase1/spec.md`
+
+### Changed Files
+
+- `docs/review/phase1/phase1-requirements-implementation-review.md`
+
+### Subagents
+
+- spec compliance and functional correctness reviewer: completed
+  - Agent: `Halley` (`019dbf7f-adf5-7a63-b361-82db8d7aeb63`)
+  - Launch status: success after initial fork option retry
+  - Result: 3 findings reported
+- tests, edge cases, and regression risk reviewer: completed
+  - Agent: `Carson` (`019dbf7f-ae37-7ea0-a4ef-ab0e42bf4b53`)
+  - Launch status: success after initial fork option retry
+  - Result: 3 findings reported
+- architecture and over-implementation reviewer: completed
+  - Agent: `Jason` (`019dbf7f-ae6b-7c91-a1c0-3baafd3a51b6`)
+  - Launch status: success after initial fork option retry
+  - Result: 2 findings reported
+- reliability and security reviewer: completed
+  - Agent: `Poincare` (`019dbf7f-aebb-7923-9f1b-03bab039589c`)
+  - Launch status: success after initial fork option retry
+  - Result: 3 findings and live-confirmation residual risks reported
+
+### Raw Findings Summary
+
+- `Halley`
+  - P1: text/image visual blocks still make normal `convert` depend on Excel COM through `shape_copy_picture`.
+  - P2: filter visibility is implemented as hidden-row filtering only; actual autoFilter criteria are not evaluated.
+  - P2: visual metadata omits spec-defined common fields when values are `None`.
+- `Carson`
+  - P2: table-only `convert` no-COM regression path is not directly tested.
+  - P2: OOXML image missing-target / missing-part warning-and-skip paths are under-tested.
+  - P3: Copilot attachment fallback API shape is fixed by automated tests despite live confirmation still pending.
+- `Jason`
+  - P3: empty sheet conversion synthesizes LLM success without an actual Copilot session, making the LLM boundary unclear.
+  - P3: render-plan policy is split between planner and convert orchestration, making future divergence likely.
+- `Poincare`
+  - P2: LLM attachment payload uses absolute local paths at the Copilot SDK boundary.
+  - P3: CLI diagnostics and parser errors print local paths.
+  - P3: successful output replacement silently ignores backup cleanup failures.
+  - Residual risks: `.xlsm` macro-disabled behavior, Excel COM cleanup with existing user processes, and real Copilot attachment behavior still require live confirmation.
+
+### MainAgent Validity Judgment
+
+Accepted findings:
+
+1. P1: normal `convert` still depends on Excel COM for text-shape and image sheets.
+   - Evidence:
+     - `src/excel_semantic_md/render/planner.py` emits `shape_copy_picture` for shape blocks and both `ooxml_image_copy` and `shape_copy_picture` for image blocks.
+     - `src/excel_semantic_md/app/convert_pipeline.py` filters only `SourceKind.CELLS` from the normal convert plan, so shape/image items remain.
+     - Local reproduction:
+       - `python -m excel_semantic_md.cli.main convert --input tests\fixtures\visuals\table-shape-visual.xlsx --out .tmp-review-shape`
+       - `python -m excel_semantic_md.cli.main convert --input tests\fixtures\visuals\table-image-visual.xlsx --out .tmp-review-image`
+       - Both commands exited `0` in non-strict mode, but `result.md` reported sheet failure: `render: Excel COM rendering requires pywin32 modules (...)`.
+   - Spec reference: `docs/phase1/spec.md` sections 7.3, 7.4, 8.1, 14.
+   - Judgment: Valid. The previous fix removed unconditional cell-range screenshots from normal convert, but the same over-dependency remains for common Phase 1 target workbooks containing text shapes or images. Text-in-shape should prefer extracted text, and OOXML image assets should not require COM when a trusted image part exists.
+   - Direction for next phase: split normal convert visual asset needs from render live-confirmation needs. For shape/image, require COM only when the visual appearance itself is needed and cannot be satisfied from extracted text or trusted OOXML original assets.
+
+2. P2: filtered-row visibility is underspecified for implementation and likely incomplete.
+   - Evidence: `src/excel_semantic_md/excel/workbook_reader.py` excludes rows from XML only when row metadata has `hidden="1"`; it does not evaluate `autoFilter` criteria.
+   - Spec reference: `docs/phase1/spec.md` section 3.3 requires rows hidden by filters to be skipped.
+   - Judgment: Valid, but this is partly a specification-design issue. Reconstructing Excel's currently visible filtered view from OOXML without Excel may be unreliable; requiring full filter evaluation may over-expand Phase 1.
+   - Direction for next phase: either implement a clearly bounded saved-hidden-row interpretation and update `spec.md`, or explicitly add Excel/live-confirmation dependence for true filter-view reproduction.
+
+3. P2: visual metadata schema omits spec-defined fields when values are `None`.
+   - Evidence: `src/excel_semantic_md/excel/ooxml_visual_reader.py` omits `relationship_id`, `target_part`, `source_part`, `extension`, `content_type`, and some chart-series fields from `to_dict()` when absent.
+   - Spec reference: `docs/phase1/spec.md` section 6.1 says visual elements have common fields and chart series fields.
+   - Judgment: Valid as a schema-contract ambiguity. The implementation is reasonable for compact JSON, but `inspect` is a supported structural output; consumers need to know whether absent and `null` are equivalent.
+   - Direction for next phase: either emit explicit `null` for spec-defined fields or narrow the spec to state that optional fields may be omitted when not available.
+
+4. P2: table-only no-COM convert regression coverage is missing.
+   - Evidence: current no-COM convert regression coverage exercises `no-visuals.xlsx` paragraph/cell-only behavior, but does not directly lock table-only behavior after the fix batch.
+   - Spec reference: `docs/phase1/spec.md` section 14 says cell-only / table-only / paragraph-only sheets with empty render items proceed to LLM without Excel COM.
+   - Judgment: Valid as a test gap.
+   - Direction for next phase: add a table-only convert test that proves rendering is skipped and LLM receives table block input.
+
+5. P2: OOXML image missing-target / missing-part warning-and-skip paths are under-tested.
+   - Evidence: tests cover non-image content type and untrusted image part, but not `image_target_missing` / `image_part_missing` flowing through render planning as skip-with-warning.
+   - Spec reference: `docs/phase1/spec.md` section 14 requires non-image content type, missing target, and missing part to be warning-and-skip.
+   - Judgment: Valid as a regression gap.
+   - Direction for next phase: add OOXML fixtures or synthetic visual tests for missing relationship target and missing package part.
+
+6. P3: empty-sheet conversion records synthetic LLM success.
+   - Evidence: `src/excel_semantic_md/app/convert_pipeline.py` creates `LlmRunResult(status="succeeded", attempts=1, raw={"generated_by": "empty_sheet_short_circuit"})` without calling Copilot.
+   - Spec reference: `docs/phase1/spec.md` section 8.1 says `1 sheet = 1 Copilot SDK session` is the basic rule; section 14 only clarifies render skipping, not LLM success synthesis.
+   - Judgment: Valid as a spec/manifest clarity issue, not a behavioral blocker. Avoiding an external LLM call for an empty visible sheet is pragmatic, but `attempts=1` and `status=succeeded` can be mistaken for a real provider result.
+   - Direction for next phase: represent this as `llm.status = skipped` with an explicit empty-sheet reason, or update `spec.md` to define synthetic empty-sheet success.
+
+7. P3: render-plan policy is split between planner and convert orchestration.
+   - Evidence: `build_render_plan()` plans cell-range items universally, while `convert_pipeline.py` removes cell-sourced items for normal convert and `render` CLI keeps them.
+   - Spec reference: `docs/phase1/spec.md` sections 2.2, 2.4, 7.2, and 14.
+   - Judgment: Valid maintainability risk. Current behavior matches the recent clarification, but the policy is distributed and easy to regress.
+   - Direction for next phase: expose planner mode or a convert-specific planning helper so normal convert, `render`, and debug render-plan payloads do not drift.
+
+8. P3: successful output replacement can silently leave old backup data if backup cleanup fails.
+   - Evidence: `src/excel_semantic_md/output/writers.py` removes `.excel-semantic-md-backup-*` with `ignore_errors=True` after successful publication.
+   - Spec reference: `docs/phase1/spec.md` sections 9.4, 9.5, 11.3, and security guidance on generated artifacts.
+   - Judgment: Valid low-priority reliability/security risk. The backup protects rollback, but after success a cleanup failure may leave old generated artifacts or debug data without any user-visible warning.
+   - Direction for next phase: surface backup cleanup failure as a warning or choose a documented retention/cleanup policy.
+
+Rejected or downgraded findings:
+
+- LLM attachment absolute paths at the Copilot SDK boundary:
+  - Judgment: Downgraded to residual external-boundary risk. The LLM input JSON intentionally stores only file names, while the SDK attachment payload likely needs local absolute paths to read files. The real provider behavior remains pending live confirmation, so this is not accepted as a code finding in isolation.
+- CLI diagnostics and parser errors printing local paths:
+  - Judgment: Rejected as a product defect for this pass. `setup` is a local diagnostic command, and parser errors benefit from showing the path the user supplied. The `logs/` and `manifest.json` path-minimization requirements do not automatically prohibit interactive CLI diagnostics. If this tool is later run in centralized log collection, the spec should be revisited.
+- Copilot fallback API shape test:
+  - Judgment: Downgraded. The test may overfit an unconfirmed SDK shape, but it currently protects the adapter's intended fallback behavior. Treat as part of the broader pending live-confirmation risk rather than a standalone defect.
+
+### Response Plan
+
+- Do not change code in this pass.
+- Address next-phase fixes in this order:
+  1. Remove normal `convert`'s unconditional COM dependency for text-shape and trusted OOXML image workbooks.
+  2. Decide and document the Phase 1 filter visibility contract before expanding implementation.
+  3. Resolve visual metadata optional/null schema behavior.
+  4. Add missing regression tests for table-only no-COM convert and image missing-target/missing-part warning paths.
+  5. Clarify empty-sheet LLM status and consolidate render planning policy.
+  6. Surface or document output backup cleanup failures.
+
+### Applied Fixes
+
+- None in this pass. The user explicitly requested findings only; fixes are deferred to the next phase.
+
+### Validation
+
+- `python -m pytest -q`
+  - Result: passed (`109 passed`)
+- `python -m excel_semantic_md.cli.main convert --input tests\fixtures\visuals\table-shape-visual.xlsx --out .tmp-review-shape`
+  - Result: exit code `0` in non-strict mode, but `result.md` reports render failure because `pywin32` is unavailable.
+- `python -m excel_semantic_md.cli.main convert --input tests\fixtures\visuals\table-image-visual.xlsx --out .tmp-review-image`
+  - Result: exit code `0` in non-strict mode, but `result.md` reports render failure because `pywin32` is unavailable.
+- Temporary `.tmp-review-shape` and `.tmp-review-image` outputs were removed after inspection.
+
+### Residual Risks
+
+- `.xlsm` macro-disabled behavior still needs live confirmation with a real VBA-containing workbook.
+- Excel COM cleanup with existing user Excel processes remains live-confirmation dependent.
+- Actual Copilot SDK/provider behavior for attachment handling remains an external-boundary risk.
+- Full Excel filter-view reproduction may be impractical without Excel; this should be resolved as a spec decision before implementation.
+
+### Pending Items
+
+- Fixes are intentionally deferred to the next phase.
+- After fixes, collect live confirmation evidence for:
+  - `.xlsm` macro-disabled behavior
+  - Excel COM cleanup with existing user Excel processes
+  - Copilot SDK local CLI behavior
+  - vision attachment behavior
+
+## 2026-04-25 Requirements/Implementation Re-review Fix Implementation
+
+### Review Scope
+
+- Milestone: `phase1-requirements-implementation-review`
+- Scope: accepted findings from `2026-04-24 Requirements/Implementation Re-review After Fix Batch`
+- Reviewed areas:
+  - `docs/phase1/spec.md`
+  - `docs/phase1/task.md`
+  - `docs/phase1/knowledge.md`
+  - `src/excel_semantic_md/app/convert_pipeline.py`
+  - `src/excel_semantic_md/render/excel_com_renderer.py`
+  - `src/excel_semantic_md/excel/ooxml_visual_reader.py`
+  - `src/excel_semantic_md/output/writers.py`
+  - `tests/test_output.py`
+  - `tests/test_ooxml_visual_reader.py`
+- Source of Truth: `docs/phase1/spec.md`
+
+### Changed Files
+
+- `docs/phase1/spec.md`
+- `docs/phase1/task.md`
+- `docs/phase1/knowledge.md`
+- `docs/review/phase1/phase1-requirements-implementation-review.md`
+- `src/excel_semantic_md/app/convert_pipeline.py`
+- `src/excel_semantic_md/render/excel_com_renderer.py`
+- `src/excel_semantic_md/excel/ooxml_visual_reader.py`
+- `src/excel_semantic_md/output/writers.py`
+- `tests/test_output.py`
+- `tests/test_ooxml_visual_reader.py`
+
+### Subagents
+
+- spec compliance and functional correctness reviewer:
+  - Agent: `Peirce` (`019dbf8e-16c7-72f3-b10b-4ee7b07cb6be`)
+  - Launch status: failed due usage limit.
+  - Result: unavailable.
+- tests, edge cases, and regression risk reviewer:
+  - Agent: `Zeno` (`019dbf8e-16fa-73b0-9aff-6fbc1e154e81`)
+  - Launch status: failed due usage limit.
+  - Result: unavailable.
+- reliability and security reviewer:
+  - Agent: `Hegel` (`019dbf8e-44a5-70d2-b8f9-39b9cf58be4f`)
+  - Launch status: failed due usage limit.
+  - Result: unavailable.
+
+User follow-up `continue` was received after the subagent failure notifications. MainAgent proceeded with an explicit alternative self-review because the required subagent review results could not be obtained in this environment.
+
+### Raw Findings Summary
+
+- No subagent findings were available because all post-fix review agents failed to start or complete due usage limits.
+- MainAgent self-review focused on the current diff against `docs/phase1/spec.md`, the accepted findings, and regression coverage.
+
+### MainAgent Validity Judgment
+
+Accepted findings addressed:
+
+1. P1: normal `convert` still depended on Excel COM for text-shape and image sheets.
+   - Response:
+     - `convert_pipeline` now filters default convert render items through `_is_default_convert_render_item()`.
+     - Cell-based `range_copy_picture` and `shape_copy_picture` items are excluded from normal convert unless `--save-render-artifacts` is explicitly set.
+     - `render_with_excel_com()` now processes `ooxml_image_copy` outside the Excel COM session and skips COM diagnostics when no COM-backed render items remain.
+   - Result: text shape sheets can proceed using extracted shape text without COM; trusted OOXML image assets can be copied and attached without COM.
+
+2. P2: filtered-row visibility was underspecified and likely incomplete.
+   - Response:
+     - `docs/phase1/spec.md` now limits Phase 1 workbook-reading visibility to OOXML-saved hidden row / column state.
+     - Full `autoFilter` condition re-evaluation is explicitly not a Phase 1 required implementation and is left to live confirmation or a later phase.
+   - Result: the spec no longer implies a broad Excel filter engine in Phase 1.
+
+3. P2: visual metadata omitted spec-defined fields when values were `None`.
+   - Response:
+     - `VisualSource.to_dict()`, `AssetCandidate.to_dict()`, and `ChartSeries.to_dict()` now emit defined fields with `null` when unavailable.
+     - `docs/phase1/spec.md` now states these defined fields are emitted with `null` or empty arrays.
+   - Result: `inspect` visual metadata has a more stable schema.
+
+4. P2: table-only no-COM convert regression coverage was missing.
+   - Response: added `test_run_convert_pipeline_skips_render_for_table_only_sheet()`.
+
+5. P2: OOXML image missing-target / missing-part warning-and-skip paths were under-tested.
+   - Response: added tests for `image_target_missing` and `image_part_missing` flowing into render planning as original-image skip warnings.
+
+6. P3: empty-sheet conversion recorded synthetic LLM success.
+   - Response:
+     - empty visible sheets now set `markdown=""` without creating a synthetic `LlmRunResult`.
+     - `docs/phase1/spec.md` states empty visible sheets skip provider LLM and surface as `llm` skipped.
+   - Result: provider success is no longer confused with empty-sheet short-circuit behavior.
+
+7. P3: render-plan policy was split between planner and convert orchestration.
+   - Response: partially addressed by centralizing normal-convert filtering in `_is_default_convert_render_item()`. A fuller planner-mode refactor remains intentionally deferred to avoid broadening this fix batch.
+
+8. P3: successful output replacement could silently leave old backup data if backup cleanup failed.
+   - Response:
+     - successful backup cleanup failure now emits a `RuntimeWarning` instead of being ignored.
+     - regression coverage was added.
+
+Rejected or deferred items:
+
+- Full render planner mode refactor remains deferred. Current changes are narrowly scoped and covered by tests.
+- Copilot SDK attachment boundary and CLI diagnostic path output remain residual risks / product-scope decisions from the previous review.
+
+### Applied Fixes
+
+- Removed normal `convert` COM requirement for text-shape sheets.
+- Enabled trusted OOXML image original asset copy / attach without opening Excel COM.
+- Kept chart rendering on the Excel COM path because `Chart.Export` remains the Phase 1 primary chart image path.
+- Clarified filter visibility scope in `docs/phase1/spec.md`.
+- Made visual metadata `source`, `asset_candidate`, and chart series fields stable with explicit `null` values.
+- Changed empty visible sheets from synthetic LLM success to provider-skipped successful sheet output.
+- Surfaced managed-output backup cleanup failures as `RuntimeWarning`.
+- Added regression tests for table-only no-COM convert, text-shape no-COM convert, trusted OOXML image copy without COM, image missing-target / missing-part skip paths, and backup cleanup warnings.
+- Updated `docs/phase1/task.md` and `docs/phase1/knowledge.md`.
+
+### Validation
+
+- `python -m pytest tests/test_output.py tests/test_ooxml_visual_reader.py tests/test_render.py -q`
+  - Result: passed (`49 passed`)
+- `python -m pytest -q`
+  - Result: passed (`115 passed`)
+
+### Residual Risks
+
+- `.xlsm` macro-disabled behavior still needs live confirmation with a real VBA-containing workbook.
+- Excel COM cleanup with existing user Excel processes remains live-confirmation dependent.
+- Actual Copilot SDK/provider behavior for attachment handling remains an external-boundary risk.
+- Full Excel filter-view reproduction remains out of Phase 1 scope unless the spec is changed again.
+- Post-fix subagent review could not be completed because all spawned agents hit usage limits; this review note records the failure and the MainAgent alternative review.
+
+### Pending Items
+
+- Collect live confirmation evidence for:
+  - `.xlsm` macro-disabled behavior
+  - Excel COM cleanup with existing user Excel processes
+  - Copilot SDK local CLI behavior
+  - vision attachment behavior
+- If agent capacity becomes available later, run a follow-up subagent review over this fix batch.
+
+## 2026-04-25 Post-fix Subagent Review Rerun
+
+### Review Scope
+
+- Milestone: `phase1-requirements-implementation-review`
+- Scope: post-fix subagent review rerun requested by the user after previous usage-limit failures.
+- Reviewed areas:
+  - `docs/phase1/spec.md`
+  - current git diff
+  - `src/excel_semantic_md/**`
+  - `tests/**`
+- Source of Truth: `docs/phase1/spec.md`
+
+### Changed Files
+
+- `src/excel_semantic_md/output/writers.py`
+- `tests/test_output.py`
+- `docs/review/phase1/phase1-requirements-implementation-review.md`
+
+### Subagents
+
+- spec compliance and functional correctness reviewer: completed
+  - Agent: `Pascal` (`019dc00d-3ab9-7442-a161-e95db11e8777`)
+  - Launch status: success
+  - Result: no findings
+- tests, edge cases, and regression risk reviewer: completed
+  - Agent: `Goodall` (`019dc00d-3a7c-7273-a665-d8bc15571ba2`)
+  - Launch status: success
+  - Result: no findings
+- reliability and security reviewer: completed
+  - Agent: `Curie` (`019dc00d-3ae7-7571-8195-515aca8e3e62`)
+  - Launch status: success
+  - Result: 1 finding reported
+
+### Raw Findings Summary
+
+- `Pascal`
+  - No findings.
+  - Ran `python -m pytest tests/test_output.py tests/test_ooxml_visual_reader.py`; result `35 passed`.
+- `Goodall`
+  - No findings.
+  - Ran selected relevant tests; result `6 passed`.
+- `Curie`
+  - P3: backup cleanup `RuntimeWarning` includes the absolute backup directory path, which can expose the user's output parent path in stderr or collected logs.
+
+### MainAgent Validity Judgment
+
+Accepted findings:
+
+1. P3: backup cleanup warning leaked a local absolute path.
+   - Evidence: `src/excel_semantic_md/output/writers.py` warning text included `backup_dir`, an absolute temp directory path under the output parent.
+   - Spec reference: `docs/phase1/spec.md` sections 9.5 and security guidance around generated artifacts / logs.
+   - Judgment: Valid. The previous change intentionally surfaced cleanup failure, but the warning does not need the absolute path to be actionable.
+   - Response: Warning text now includes only `backup_dir.name`, preserving the backup marker without exposing the output parent path.
+
+Rejected or downgraded findings:
+
+- None from this rerun.
+
+### Applied Fixes
+
+- Changed managed-output backup cleanup `RuntimeWarning` to include only the backup directory basename.
+- Added regression assertion that the warning text does not include the pytest temp/output parent path.
+
+### Validation
+
+- `python -m pytest tests/test_output.py tests/test_ooxml_visual_reader.py -q`
+  - Result: passed (`35 passed`)
+- `python -m pytest -q`
+  - Result: passed (`115 passed`)
+
+### Residual Risks
+
+- `.xlsm` macro-disabled behavior still needs live confirmation with a real VBA-containing workbook.
+- Excel COM cleanup with existing user Excel processes remains live-confirmation dependent.
+- Actual Copilot SDK/provider behavior for attachment handling remains an external-boundary risk.
+
+### Pending Items
+
+- Collect live confirmation evidence for:
+  - `.xlsm` macro-disabled behavior
+  - Excel COM cleanup with existing user Excel processes
+  - Copilot SDK local CLI behavior
+  - vision attachment behavior

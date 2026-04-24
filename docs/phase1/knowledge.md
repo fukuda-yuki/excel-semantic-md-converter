@@ -251,3 +251,13 @@ README は背景・全体像・初期構想の参考資料として扱う。
 - OOXML image original asset は `image/*` content-type allowlist を満たす場合だけ `ooxml_image_copy` を計画する。non-image content type、missing target、missing part は warning-and-skip にする。
 - `render` CLI は planning/rendering の unexpected exception を JSON failure に正規化する。`render_with_excel_com()` は artifact 単位の通常例外も failure 化して後続 item を継続する。
 - 表示値フォーマットは conservative subset として percent / currency / grouping / fixed decimals を扱う。scientific / fraction / accounting は fallback を維持する。
+
+## 22. 2026-04-24 Requirements/Implementation Re-review After Fix Batch 対応メモ
+
+- 通常 `convert` では、text shape の `shape_copy_picture` を必須 render 対象にしない。shape text は OOXML 抽出済み text を LLM 入力に渡し、図形の見た目自体が必要な場合や `--save-render-artifacts` 指定時だけ COM rendering を使う。
+- 通常 `convert` では、trusted OOXML image original asset の copy / publish / attach を Excel COM なしで行う。image block の `shape_copy_picture` は live confirmation / render artifact 用であり、通常変換の必須経路にしない。
+- `render_with_excel_com()` は `ooxml_image_copy` item を Excel COM session の外で処理する。COM item が無い場合は Excel COM diagnostic も要求しない。
+- filter visibility は Phase 1 では OOXML に保存済みの hidden row / hidden column 状態を根拠にする。`autoFilter` 条件を再評価して Excel の現在表示行を完全再現することは、過剰実装になりやすいため Phase 1 必須から外す。
+- visual metadata の `source` / `asset_candidate` / chart series の定義済み field は stable schema として `null` 付きで出力する。
+- visible block が無い empty sheet は LLM provider を呼ばず successful sheet として扱い、`llm` は provider 成功と区別できる skipped 状態にする。
+- managed output backup cleanup が成功後に失敗した場合は、変換成功自体は壊さず `RuntimeWarning` として surface する。

@@ -10,7 +10,7 @@ from typing import Any
 from excel_semantic_md.excel import detect_blocks, link_visuals, read_visual_metadata, read_workbook
 from excel_semantic_md.excel.ooxml_visual_reader import SheetVisualResult
 from excel_semantic_md.llm import GitHubCopilotSdkAdapter, LlmRunOptions, build_llm_request
-from excel_semantic_md.llm.models import LlmResponse, LlmRunResult
+from excel_semantic_md.llm.models import LlmRunResult
 from excel_semantic_md.models import FailureInfo, SheetModel, SourceKind, WarningInfo
 from excel_semantic_md.output.models import ConvertResult, ConvertSheetResult
 from excel_semantic_md.render import build_render_plan, render_with_excel_com
@@ -125,7 +125,7 @@ def _run_sheet_pipeline(
             if command_options.get("save_render_artifacts"):
                 plan_items = raw_plan_items
             else:
-                plan_items = [item for item in raw_plan_items if item.block.source != SourceKind.CELLS]
+                plan_items = [item for item in raw_plan_items if _is_default_convert_render_item(item)]
             render_plan_payload = {
                 "sheet_index": linked_sheet.sheet_index,
                 "name": linked_sheet.name,
@@ -146,26 +146,6 @@ def _run_sheet_pipeline(
             failures.extend(plan_failures)
 
             if not failures and not plan_items and not linked_sheet.blocks:
-                stage = "llm_input"
-                llm_options = LlmRunOptions(
-                    model=command_options.get("model"),
-                    vision_model=command_options.get("vision_model"),
-                    max_images_per_sheet=command_options.get("max_images_per_sheet"),
-                )
-                llm_request = build_llm_request(linked_sheet, None, options=llm_options)
-                llm_input_payload = llm_request.input.to_dict()
-                llm_result = LlmRunResult(
-                    status="succeeded",
-                    attempts=1,
-                    response=LlmResponse(
-                        sheet_summary="No visible content.",
-                        sections=[],
-                        figures=[],
-                        unknowns=[],
-                        markdown="",
-                        raw={"generated_by": "empty_sheet_short_circuit"},
-                    ),
-                )
                 markdown = ""
             elif not failures and not plan_items:
                 stage = "llm_input"
@@ -295,3 +275,11 @@ def _warning_info(item: Any) -> WarningInfo:
         message=getattr(item, "message"),
         details=dict(getattr(item, "details", {})),
     )
+
+
+def _is_default_convert_render_item(item: Any) -> bool:
+    if item.block.source == SourceKind.CELLS:
+        return False
+    if item.source == "shape_copy_picture":
+        return False
+    return item.role.value == "markdown"

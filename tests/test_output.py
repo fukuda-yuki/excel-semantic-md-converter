@@ -17,6 +17,7 @@ from excel_semantic_md.models import (
     Rect,
     SheetModel,
     SourceKind,
+    TableBlock,
     WarningInfo,
 )
 from excel_semantic_md.output import ConvertResult, ConvertSheetResult, write_convert_outputs
@@ -433,6 +434,48 @@ def test_write_convert_outputs_restores_existing_outputs_when_publish_move_fails
     assert (output_dir / "manifest.json").read_text(encoding="utf-8") == '{"old": true}\n'
     assert (output_dir / "assets" / "old.txt").read_text(encoding="utf-8") == "old asset\n"
     assert (output_dir / "debug" / "old.json").read_text(encoding="utf-8") == '{"old": true}\n'
+
+
+def test_write_convert_outputs_warns_when_backup_cleanup_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+    (output_dir / "result.md").write_text("old result\n", encoding="utf-8")
+    sheet = SheetModel(sheet_index=1, name="BackupWarning", blocks=[])
+    convert_result = ConvertResult(
+        input_file_name="book.xlsx",
+        schema_version="phase1.0",
+        generated_at="2026-04-23T00:00:00+00:00",
+        command_options={
+            "model": None,
+            "vision_model": None,
+            "max_images_per_sheet": None,
+            "save_debug_json": False,
+            "save_render_artifacts": False,
+            "strict": False,
+        },
+        output_dir=output_dir,
+        workbook_extraction_payload={"schema_version": "phase1.0", "input_file_name": "book.xlsx", "sheets": []},
+        block_detection_payload={"schema_version": "phase1.0", "input_file_name": "book.xlsx", "sheets": []},
+        linked_workbook_payload={"schema_version": "phase1.0", "input_file_name": "book.xlsx", "sheets": []},
+        sheets=[ConvertSheetResult(sheet=sheet, status="succeeded", markdown="new result")],
+    )
+    real_rmtree = output_writers.shutil.rmtree
+
+    def guarded_rmtree(path, *args, **kwargs):
+        if Path(path).name.startswith(".excel-semantic-md-backup-"):
+            raise OSError("cleanup denied")
+        return real_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(output_writers.shutil, "rmtree", guarded_rmtree)
+
+    with pytest.warns(RuntimeWarning, match=r"Failed to remove managed output backup directory \.excel-semantic-md-backup-") as warnings:
+        output_files = write_convert_outputs(convert_result)
+
+    assert output_files.result_markdown.read_text(encoding="utf-8").startswith("## BackupWarning")
+    assert str(tmp_path) not in str(warnings[0].message)
 
 
 def test_convert_command_writes_outputs_and_only_fails_in_strict_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -858,8 +901,8 @@ def test_run_convert_pipeline_normalizes_render_plan_exception_to_failed_sheet(
     )
 
     assert [sheet.status for sheet in result.sheets] == ["succeeded", "failed"]
-    assert result.sheets[0].llm_result is not None
-    assert result.sheets[0].llm_result.status == "succeeded"
+    assert result.sheets[0].llm_result is None
+    assert result.sheets[0].markdown == ""
     assert result.sheets[1].failures[0].stage == "render_plan"
     assert "plan boom" in result.sheets[1].failures[0].details["error"]
 
@@ -1074,6 +1117,184 @@ def test_run_convert_pipeline_skips_render_for_cell_only_sheet_with_zero_image_l
         "max_images_per_sheet": 0,
         "attachments": [],
     }
+
+
+def test_run_convert_pipeline_skips_render_for_table_only_sheet(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_path = tmp_path / "book.xlsx"
+    input_path.write_bytes(b"placeholder")
+    sheet = SheetModel(
+        sheet_index=1,
+        name="TableOnly",
+        blocks=[
+            TableBlock(
+                id="s001-b001-table",
+                anchor=Rect(sheet="TableOnly", start_row=1, start_col=1, end_row=2, end_col=2, a1="A1:B2"),
+                source=SourceKind.CELLS,
+                rows=[["Name", "Value"], ["North", "12"]],
+                header_rows=1,
+            )
+        ],
+    )
+    read_result = SimpleNamespace(
+        input_file_name="book.xlsx",
+        to_dict=lambda: {"schema_version": "phase1.0", "input_file_name": "book.xlsx", "sheets": []},
+    )
+    linked_workbook = SimpleNamespace(
+        schema_version="phase1.0",
+        input_file_name="book.xlsx",
+        sheets=[sheet],
+        to_dict=lambda: {"schema_version": "phase1.0", "input_file_name": "book.xlsx", "sheets": []},
+    )
+    observed: dict[str, object] = {}
+
+    class ObservingAdapter:
+        def run_sheet(self, sent_sheet, render_result, *, options, request):
+            observed["render_result"] = render_result
+            observed["block_kinds"] = [block["kind"] for block in request.input.to_dict()["blocks"]]
+            observed["attachments"] = [attachment.to_dict() for attachment in request.attachments]
+            return LlmRunResult(
+                status="succeeded",
+                attempts=1,
+                response=LlmResponse(
+                    sheet_summary="Table sheet",
+                    sections=[],
+                    figures=[],
+                    unknowns=[],
+                    markdown="| Name | Value |\n| --- | --- |\n| North | 12 |",
+                ),
+            )
+
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.read_workbook", lambda _path: read_result)
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.detect_blocks", lambda _read_result: linked_workbook)
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.read_visual_metadata", lambda _path: [])
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.link_visuals", lambda block_model, _visuals: block_model)
+    monkeypatch.setattr(
+        "excel_semantic_md.app.convert_pipeline.render_with_excel_com",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("render must not run for table-only sheets")),
+    )
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.GitHubCopilotSdkAdapter", ObservingAdapter)
+
+    result = run_convert_pipeline(
+        input_path,
+        tmp_path / "out",
+        command_options={
+            "model": None,
+            "vision_model": None,
+            "max_images_per_sheet": None,
+            "save_debug_json": False,
+            "save_render_artifacts": False,
+            "strict": False,
+        },
+    )
+
+    assert result.failed_sheet_count == 0
+    assert result.sheets[0].render_result is None
+    assert observed == {
+        "render_result": None,
+        "block_kinds": ["table"],
+        "attachments": [],
+    }
+
+
+def test_run_convert_pipeline_skips_shape_picture_for_text_shape_sheet(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_path = Path(__file__).resolve().parent / "fixtures" / "visuals" / "table-shape-visual.xlsx"
+    observed: dict[str, object] = {}
+
+    class ObservingAdapter:
+        def run_sheet(self, sheet, render_result, *, options, request):
+            observed["render_result"] = render_result
+            observed["block_kinds"] = [block["kind"] for block in request.input.to_dict()["blocks"]]
+            observed["attachments"] = [attachment.to_dict() for attachment in request.attachments]
+            return LlmRunResult(
+                status="succeeded",
+                attempts=1,
+                response=LlmResponse(
+                    sheet_summary="Shape sheet",
+                    sections=[],
+                    figures=[],
+                    unknowns=[],
+                    markdown="Shape markdown",
+                ),
+            )
+
+    monkeypatch.setattr(
+        "excel_semantic_md.app.convert_pipeline.render_with_excel_com",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("shape text convert must not require COM rendering")),
+    )
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.GitHubCopilotSdkAdapter", ObservingAdapter)
+
+    result = run_convert_pipeline(
+        input_path,
+        tmp_path / "out",
+        command_options={
+            "model": None,
+            "vision_model": None,
+            "max_images_per_sheet": None,
+            "save_debug_json": False,
+            "save_render_artifacts": False,
+            "strict": False,
+        },
+    )
+
+    assert result.failed_sheet_count == 0
+    assert result.sheets[0].render_result is None
+    assert observed == {
+        "render_result": None,
+        "block_kinds": ["table", "shape"],
+        "attachments": [],
+    }
+
+
+def test_run_convert_pipeline_copies_trusted_ooxml_image_without_com(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_path = Path(__file__).resolve().parent / "fixtures" / "visuals" / "table-image-visual.xlsx"
+    observed: dict[str, object] = {}
+
+    class ObservingAdapter:
+        def run_sheet(self, sheet, render_result, *, options, request):
+            observed["render_result"] = render_result
+            observed["attachments"] = [attachment.to_dict() for attachment in request.attachments]
+            return LlmRunResult(
+                status="succeeded",
+                attempts=1,
+                response=LlmResponse(
+                    sheet_summary="Image sheet",
+                    sections=[],
+                    figures=[],
+                    unknowns=[],
+                    markdown="Image markdown",
+                ),
+            )
+
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.GitHubCopilotSdkAdapter", ObservingAdapter)
+
+    result = run_convert_pipeline(
+        input_path,
+        tmp_path / "out",
+        command_options={
+            "model": None,
+            "vision_model": None,
+            "max_images_per_sheet": None,
+            "save_debug_json": False,
+            "save_render_artifacts": False,
+            "strict": False,
+        },
+    )
+
+    assert result.failed_sheet_count == 0
+    assert result.sheets[0].render_result is not None
+    assert result.sheets[0].render_result.failures == []
+    assert [artifact.source for artifact in result.sheets[0].render_result.artifacts] == ["ooxml_image_copy"]
+    assert observed["render_result"] is result.sheets[0].render_result
+    assert [attachment["source"] for attachment in observed["attachments"]] == ["ooxml_image_copy"]
 
 
 def test_run_convert_pipeline_preserves_explicit_render_artifacts_for_cell_only_sheet(

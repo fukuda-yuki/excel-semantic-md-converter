@@ -6,6 +6,7 @@ import json
 import re
 import shutil
 import tempfile
+import warnings
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -399,7 +400,14 @@ def _replace_managed_outputs(staging_dir: Path, output_dir: Path) -> None:
             backup_dir.rmdir()
         raise
     else:
-        shutil.rmtree(backup_dir, ignore_errors=True)
+        try:
+            shutil.rmtree(backup_dir)
+        except OSError as exc:
+            warnings.warn(
+                f"Failed to remove managed output backup directory {backup_dir.name}: {exc}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         staging_dir.rmdir()
 
 

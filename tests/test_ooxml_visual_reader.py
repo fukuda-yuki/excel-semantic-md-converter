@@ -113,7 +113,11 @@ def test_read_visual_metadata_reads_shape_and_unknown_group_shape() -> None:
             "to": {"row": 4, "col": 4},
             "a1": "B2:D4",
         },
-        "source": {"drawing_part": "xl/drawings/drawing1.xml"},
+        "source": {
+            "drawing_part": "xl/drawings/drawing1.xml",
+            "relationship_id": None,
+            "target_part": None,
+        },
         "asset_candidate": {
             "kind": "shape",
             "source_part": "xl/drawings/drawing1.xml",
@@ -133,7 +137,11 @@ def test_read_visual_metadata_reads_shape_and_unknown_group_shape() -> None:
             "to": {"row": 8, "col": 3},
             "a1": "A6:C8",
         },
-        "source": {"drawing_part": "xl/drawings/drawing1.xml"},
+        "source": {
+            "drawing_part": "xl/drawings/drawing1.xml",
+            "relationship_id": None,
+            "target_part": None,
+        },
         "asset_candidate": {
             "kind": "unknown",
             "source_part": "xl/drawings/drawing1.xml",
@@ -333,6 +341,43 @@ def test_build_render_plan_skips_original_image_copy_for_untrusted_image_part(tm
     assert [warning.code for warning in warnings] == ["image_original_asset_untrusted_part"]
 
 
+def test_build_render_plan_skips_original_image_copy_when_image_target_is_missing(tmp_path: Path) -> None:
+    workbook_path = tmp_path / "image-missing-target.xlsx"
+    _copy_workbook_with_rewritten_part(
+        FIXTURES / "image-visual.xlsx",
+        workbook_path,
+        "xl/drawings/_rels/drawing1.xml.rels",
+        lambda payload: payload.replace(b'Id="rIdImg1"', b'Id="rIdOther"'),
+    )
+
+    workbook = link_visuals(detect_blocks(read_workbook(workbook_path)), read_visual_metadata(workbook_path))
+    visual_sheet = read_visual_metadata(workbook_path)[0]
+    items, warnings, failures = build_render_plan(workbook.sheets[0], visual_sheet)
+
+    assert failures == []
+    assert [warning.code for warning in visual_sheet.visuals[0].warnings] == ["image_target_missing"]
+    assert [item.source for item in items] == ["range_copy_picture", "shape_copy_picture"]
+    assert [warning.code for warning in warnings] == ["image_original_asset_unavailable"]
+
+
+def test_build_render_plan_skips_original_image_copy_when_image_part_is_missing(tmp_path: Path) -> None:
+    workbook_path = tmp_path / "image-missing-part.xlsx"
+    _copy_workbook_without_part(
+        FIXTURES / "image-visual.xlsx",
+        workbook_path,
+        "xl/media/image1.png",
+    )
+
+    workbook = link_visuals(detect_blocks(read_workbook(workbook_path)), read_visual_metadata(workbook_path))
+    visual_sheet = read_visual_metadata(workbook_path)[0]
+    items, warnings, failures = build_render_plan(workbook.sheets[0], visual_sheet)
+
+    assert failures == []
+    assert [warning.code for warning in visual_sheet.visuals[0].warnings] == ["image_part_missing"]
+    assert [item.source for item in items] == ["range_copy_picture", "shape_copy_picture"]
+    assert [warning.code for warning in warnings] == ["image_original_asset_unavailable"]
+
+
 def test_inspect_includes_visual_metadata_and_linked_visual_blocks() -> None:
     code, stdout, stderr = _run_cli(["inspect", "--input", str(FIXTURES / "image-visual.xlsx")])
 
@@ -413,6 +458,13 @@ def _copy_workbook_with_replaced_part(source: Path, target: Path, part_name: str
     with zipfile.ZipFile(source) as source_archive, zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as target_archive:
         for item in source_archive.infolist():
             target_archive.writestr(item, payload if item.filename == part_name else source_archive.read(item.filename))
+
+
+def _copy_workbook_with_rewritten_part(source: Path, target: Path, part_name: str, rewriter) -> None:
+    with zipfile.ZipFile(source) as source_archive, zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as target_archive:
+        for item in source_archive.infolist():
+            payload = source_archive.read(item.filename)
+            target_archive.writestr(item, rewriter(payload) if item.filename == part_name else payload)
 
 
 def _copy_workbook_without_part(source: Path, target: Path, part_name: str) -> None:

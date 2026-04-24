@@ -186,6 +186,9 @@ Phase 1 では、見えている情報だけを変換対象にする。
 - filter により非表示の行は処理しない。
 
 この仕様は、「ユーザーが目視している workbook 内容を semantic Markdown 化する」ことを優先するためである。
+Phase 1 の workbook 読み取り単独では、OOXML に保存済みの hidden row / hidden column 状態を visibility の根拠とする。
+`autoFilter` 条件を再評価して Excel の現在表示行を完全再現することは Phase 1 の必須実装にしない。
+Excel の実表示に依存する filter-view の完全確認は live confirmation または後続フェーズの対象とする。
 
 ### 3.4 数式セル
 
@@ -344,6 +347,8 @@ openpyxl で取得できない情報は raw OOXML を直接読む。
 - `asset_candidate`: `kind`、`source_part`、`extension`、`content_type`
 - `warnings`
 
+`source` と `asset_candidate` の定義済みフィールドは、値を取得できない場合も `null` として出力する。
+
 種別ごとの追加フィールド:
 
 - `shape`: `shape_type`、`text`
@@ -358,6 +363,8 @@ openpyxl で取得できない情報は raw OOXML を直接読む。
 - `values`
 - `category_ref`
 - `value_ref`
+
+`chart.series[]` の定義済みフィールドも、値を取得できない場合は `null` または空配列として出力する。
 
 anchor の扱い:
 
@@ -669,6 +676,9 @@ strict では最終終了コードを失敗にする。
 ## 14. 2026-04-24 Re-review Fix Batch Clarifications
 
 - `convert` は cell-based block の `range_copy_picture` を常時 render 必須にはしない。cell-only / table-only / paragraph-only sheet で render item が空なら、Excel COM を使わずに LLM へ進む。
+- `convert` は text shape の `shape_copy_picture` を常時 render 必須にはしない。text shape は抽出済み text を優先し、通常変換では Excel COM を使わずに LLM へ進んでよい。
+- `convert` は trusted OOXML image original asset を Excel COM なしで copy / publish / attach してよい。`shape_copy_picture` による image block の確認用画像は通常変換の必須経路にしない。
 - `--max-images-per-sheet` 未指定時の既定値は 3。既定 attachment 候補は `chart` / `image` / `shape` の主要 visual に限定し、`range_copy_picture` による cell screenshot は既定添付候補に含めない。
 - `--max-images-per-sheet 0` は attachment 0 件を意味する。visual block が無い sheet では render を起動しない。
 - OOXML image original asset は `image/*` content type allowlist を満たす target part だけを copy / publish / attach する。non-image content type、missing target、missing part は warning-and-skip とする。
+- visible block が無い空 sheet は LLM を呼ばずに successful sheet として扱い、`llm` status は provider 成功と区別できるよう skipped とする。

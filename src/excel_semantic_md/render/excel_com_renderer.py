@@ -139,8 +139,53 @@ def render_with_excel_com(
         failures=list(failures),
     )
 
+    output_dir = temp_dir / f"sheet-{_safe_component(sheet_name)}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    counters: dict[tuple[str, str, str], int] = defaultdict(int)
+    rendered_artifacts: list[tuple[int, RenderArtifact]] = []
+    com_items: list[tuple[int, RenderPlanItem]] = []
+    for index, item in enumerate(plan_items):
+        if item.source == "ooxml_image_copy":
+            try:
+                artifact = _render_plan_item(
+                    workbook_path=workbook_path,
+                    worksheet=None,
+                    item=item,
+                    output_dir=output_dir,
+                    counters=counters,
+                )
+            except RenderTaskError as exc:
+                result.failures.append(
+                    FailureInfo(
+                        stage="render",
+                        message=str(exc),
+                        details=exc.details,
+                    )
+                )
+            except Exception as exc:
+                result.failures.append(
+                    FailureInfo(
+                        stage="render",
+                        message="Render artifact failed unexpectedly.",
+                        details={
+                            "block_id": item.block.id,
+                            "kind": item.kind,
+                            "error": str(exc),
+                        },
+                    )
+                )
+            else:
+                rendered_artifacts.append((index, artifact))
+        else:
+            com_items.append((index, item))
+
+    if not com_items:
+        result.artifacts.extend(artifact for _index, artifact in sorted(rendered_artifacts, key=lambda pair: pair[0]))
+        return result
+
     available, message = excel_com_diagnostic()
     if not available:
+        result.artifacts.extend(artifact for _index, artifact in sorted(rendered_artifacts, key=lambda pair: pair[0]))
         result.failures.append(
             FailureInfo(
                 stage="render",
@@ -155,10 +200,7 @@ def render_with_excel_com(
         session = ExcelSession(workbook_path)
         with session:
             worksheet = session.worksheet(sheet_name)
-            output_dir = temp_dir / f"sheet-{_safe_component(sheet_name)}"
-            output_dir.mkdir(parents=True, exist_ok=True)
-            counters: dict[tuple[str, str, str], int] = defaultdict(int)
-            for item in plan_items:
+            for index, item in com_items:
                 try:
                     artifact = _render_plan_item(
                         workbook_path=workbook_path,
@@ -189,7 +231,7 @@ def render_with_excel_com(
                         )
                     )
                     continue
-                result.artifacts.append(artifact)
+                rendered_artifacts.append((index, artifact))
     except Exception as exc:
         result.failures.append(
             FailureInfo(
@@ -202,6 +244,7 @@ def render_with_excel_com(
         if session is not None:
             result.warnings.extend(session.cleanup_warnings)
 
+    result.artifacts.extend(artifact for _index, artifact in sorted(rendered_artifacts, key=lambda pair: pair[0]))
     return result
 
 

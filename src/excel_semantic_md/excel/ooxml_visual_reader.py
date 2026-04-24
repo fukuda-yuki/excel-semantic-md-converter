@@ -77,12 +77,11 @@ class VisualSource:
     target_part: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        data: dict[str, Any] = {"drawing_part": self.drawing_part}
-        if self.relationship_id is not None:
-            data["relationship_id"] = self.relationship_id
-        if self.target_part is not None:
-            data["target_part"] = self.target_part
-        return data
+        return {
+            "drawing_part": self.drawing_part,
+            "relationship_id": self.relationship_id,
+            "target_part": self.target_part,
+        }
 
 
 @dataclass
@@ -93,14 +92,12 @@ class AssetCandidate:
     content_type: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        data: dict[str, Any] = {"kind": self.kind}
-        if self.source_part is not None:
-            data["source_part"] = self.source_part
-        if self.extension is not None:
-            data["extension"] = self.extension
-        if self.content_type is not None:
-            data["content_type"] = self.content_type
-        return data
+        return {
+            "kind": self.kind,
+            "source_part": self.source_part,
+            "extension": self.extension,
+            "content_type": self.content_type,
+        }
 
 
 @dataclass
@@ -112,17 +109,13 @@ class ChartSeries:
     value_ref: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        data: dict[str, Any] = {
+        return {
+            "name": self.name,
             "categories": list(self.categories),
             "values": list(self.values),
+            "category_ref": self.category_ref,
+            "value_ref": self.value_ref,
         }
-        if self.name is not None:
-            data["name"] = self.name
-        if self.category_ref is not None:
-            data["category_ref"] = self.category_ref
-        if self.value_ref is not None:
-            data["value_ref"] = self.value_ref
-        return data
 
 
 @dataclass
