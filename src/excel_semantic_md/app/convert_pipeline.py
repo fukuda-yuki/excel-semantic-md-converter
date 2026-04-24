@@ -11,7 +11,7 @@ from excel_semantic_md.excel import detect_blocks, link_visuals, read_visual_met
 from excel_semantic_md.excel.ooxml_visual_reader import SheetVisualResult
 from excel_semantic_md.llm import GitHubCopilotSdkAdapter, LlmRunOptions, build_llm_request
 from excel_semantic_md.llm.models import LlmResponse, LlmRunResult
-from excel_semantic_md.models import FailureInfo, SheetModel, WarningInfo
+from excel_semantic_md.models import FailureInfo, SheetModel, SourceKind, WarningInfo
 from excel_semantic_md.output.models import ConvertResult, ConvertSheetResult
 from excel_semantic_md.render import build_render_plan, render_with_excel_com
 
@@ -117,11 +117,15 @@ def _run_sheet_pipeline(
     try:
         if not failures:
             stage = "render_plan"
-            plan_items, plan_warnings, plan_failures = build_render_plan(
+            raw_plan_items, plan_warnings, plan_failures = build_render_plan(
                 linked_sheet,
                 visual_sheet,
                 save_render_artifacts=bool(command_options.get("save_render_artifacts")),
             )
+            if command_options.get("save_render_artifacts"):
+                plan_items = raw_plan_items
+            else:
+                plan_items = [item for item in raw_plan_items if item.block.source != SourceKind.CELLS]
             render_plan_payload = {
                 "sheet_index": linked_sheet.sheet_index,
                 "name": linked_sheet.name,
@@ -163,6 +167,43 @@ def _run_sheet_pipeline(
                     ),
                 )
                 markdown = ""
+            elif not failures and not plan_items:
+                stage = "llm_input"
+                llm_options = LlmRunOptions(
+                    model=command_options.get("model"),
+                    vision_model=command_options.get("vision_model"),
+                    max_images_per_sheet=command_options.get("max_images_per_sheet"),
+                )
+                llm_request = build_llm_request(linked_sheet, None, options=llm_options)
+                llm_input_payload = llm_request.input.to_dict()
+                try:
+                    stage = "llm"
+                    llm_result = llm_adapter.run_sheet(
+                        linked_sheet,
+                        None,
+                        options=llm_options,
+                        request=llm_request,
+                    )
+                except Exception as exc:
+                    failures.append(
+                        FailureInfo(
+                            stage="llm",
+                            message="LLM stage raised an unexpected exception.",
+                            details={"sheet_name": linked_sheet.name, "error": str(exc)},
+                        )
+                    )
+                else:
+                    if llm_result.status == "failed":
+                        failures.append(
+                            llm_result.failure
+                            or FailureInfo(
+                                stage="llm",
+                                message="LLM stage reported failure without details.",
+                                details={"sheet_name": linked_sheet.name},
+                            )
+                        )
+                    elif llm_result.response is not None:
+                        markdown = llm_result.response.markdown
             elif not failures:
                 try:
                     stage = "render"

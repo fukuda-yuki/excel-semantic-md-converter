@@ -8,7 +8,8 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 import excel_semantic_md.cli.main as cli_main
-from excel_semantic_md.excel import read_visual_metadata
+from excel_semantic_md.excel import detect_blocks, link_visuals, read_visual_metadata, read_workbook
+from excel_semantic_md.render.planner import build_render_plan
 
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "visuals"
@@ -245,6 +246,93 @@ def test_malformed_drawing_warning_does_not_stop_following_sheets(tmp_path: Path
     assert sheets[1].warnings == []
 
 
+def test_read_visual_metadata_warns_when_sheet_drawing_relationships_part_is_missing(tmp_path: Path) -> None:
+    workbook_path = tmp_path / "missing-sheet-drawing-rels.xlsx"
+    _copy_workbook_without_part(
+        FIXTURES / "image-visual.xlsx",
+        workbook_path,
+        "xl/worksheets/_rels/sheet1.xml.rels",
+    )
+
+    sheet = read_visual_metadata(workbook_path)[0]
+
+    assert sheet.visuals == []
+    assert [warning.code for warning in sheet.warnings] == ["sheet_drawing_relationships_missing"]
+
+
+def test_read_visual_metadata_warns_when_chart_target_is_missing(tmp_path: Path) -> None:
+    workbook_path = tmp_path / "missing-chart-target.xlsx"
+    _copy_workbook_without_part(
+        FIXTURES / "chart-visual.xlsx",
+        workbook_path,
+        "__no_such_part__",
+    )
+    _rewrite_zip_part_bytes(
+        workbook_path,
+        "xl/drawings/_rels/drawing1.xml.rels",
+        lambda payload: payload.replace(b"/xl/charts/chart1.xml", b"/xl/charts/missing.xml"),
+    )
+
+    sheet = read_visual_metadata(workbook_path)[0]
+
+    assert [warning.code for warning in sheet.visuals[0].warnings] == ["chart_part_missing"]
+
+
+def test_read_visual_metadata_warns_when_chart_part_is_malformed(tmp_path: Path) -> None:
+    workbook_path = tmp_path / "malformed-chart.xlsx"
+    _copy_workbook_with_replaced_part(
+        FIXTURES / "chart-visual.xlsx",
+        workbook_path,
+        "xl/charts/chart1.xml",
+        b"<c:chartSpace>",
+    )
+
+    sheet = read_visual_metadata(workbook_path)[0]
+
+    assert [warning.code for warning in sheet.visuals[0].warnings] == ["chart_part_parse_failed"]
+
+
+def test_build_render_plan_skips_original_image_copy_for_non_image_content_type(tmp_path: Path) -> None:
+    workbook_path = tmp_path / "image-non-image-target.xlsx"
+    _copy_workbook_with_replaced_content_type(
+        FIXTURES / "image-visual.xlsx",
+        workbook_path,
+        "/xl/media/image1.png",
+        "application/octet-stream",
+    )
+
+    workbook = link_visuals(detect_blocks(read_workbook(workbook_path)), read_visual_metadata(workbook_path))
+    visual_sheet = read_visual_metadata(workbook_path)[0]
+    items, warnings, failures = build_render_plan(workbook.sheets[0], visual_sheet)
+
+    assert failures == []
+    assert [item.source for item in items] == ["range_copy_picture", "shape_copy_picture"]
+    assert [warning.code for warning in warnings] == ["image_original_asset_invalid_content_type"]
+
+
+def test_build_render_plan_skips_original_image_copy_for_untrusted_image_part(tmp_path: Path) -> None:
+    workbook_path = tmp_path / "image-untrusted-target.xlsx"
+    _copy_workbook_with_replaced_content_type(
+        FIXTURES / "image-visual.xlsx",
+        workbook_path,
+        "/xl/worksheets/sheet1.xml",
+        "image/png",
+    )
+    _rewrite_zip_part_bytes(
+        workbook_path,
+        "xl/drawings/_rels/drawing1.xml.rels",
+        lambda payload: payload.replace(b"../media/image1.png", b"../worksheets/sheet1.xml"),
+    )
+
+    workbook = link_visuals(detect_blocks(read_workbook(workbook_path)), read_visual_metadata(workbook_path))
+    visual_sheet = read_visual_metadata(workbook_path)[0]
+    items, warnings, failures = build_render_plan(workbook.sheets[0], visual_sheet)
+
+    assert failures == []
+    assert [item.source for item in items] == ["range_copy_picture", "shape_copy_picture"]
+    assert [warning.code for warning in warnings] == ["image_original_asset_untrusted_part"]
+
+
 def test_inspect_includes_visual_metadata_and_linked_visual_blocks() -> None:
     code, stdout, stderr = _run_cli(["inspect", "--input", str(FIXTURES / "image-visual.xlsx")])
 
@@ -325,6 +413,51 @@ def _copy_workbook_with_replaced_part(source: Path, target: Path, part_name: str
     with zipfile.ZipFile(source) as source_archive, zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as target_archive:
         for item in source_archive.infolist():
             target_archive.writestr(item, payload if item.filename == part_name else source_archive.read(item.filename))
+
+
+def _copy_workbook_without_part(source: Path, target: Path, part_name: str) -> None:
+    with zipfile.ZipFile(source) as source_archive, zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as target_archive:
+        for item in source_archive.infolist():
+            if item.filename == part_name:
+                continue
+            target_archive.writestr(item, source_archive.read(item.filename))
+
+
+def _copy_workbook_with_replaced_content_type(source: Path, target: Path, part_name: str, content_type: str) -> None:
+    with zipfile.ZipFile(source) as source_archive, zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as target_archive:
+        for item in source_archive.infolist():
+            payload = source_archive.read(item.filename)
+            if item.filename == "[Content_Types].xml":
+                payload = _rewrite_content_type(payload, part_name, content_type)
+            target_archive.writestr(item, payload)
+
+
+def _rewrite_zip_part_bytes(path: Path, part_name: str, rewriter) -> None:
+    temp_path = path.with_suffix(path.suffix + ".tmp")
+    with zipfile.ZipFile(path, "r") as source_archive, zipfile.ZipFile(temp_path, "w", zipfile.ZIP_DEFLATED) as target_archive:
+        for item in source_archive.infolist():
+            payload = source_archive.read(item.filename)
+            if item.filename == part_name:
+                payload = rewriter(payload)
+            target_archive.writestr(item, payload)
+    temp_path.replace(path)
+
+
+def _rewrite_content_type(payload: bytes, part_name: str, content_type: str) -> bytes:
+    root = ElementTree.fromstring(payload)
+    found = False
+    for node in root:
+        if node.attrib.get("PartName") == part_name:
+            node.attrib["ContentType"] = content_type
+            found = True
+            break
+    if not found:
+        ElementTree.SubElement(
+            root,
+            "{http://schemas.openxmlformats.org/package/2006/content-types}Override",
+            {"PartName": part_name, "ContentType": content_type},
+        )
+    return ElementTree.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
 def _copy_workbook_with_replaced_part_and_empty_second_sheet(source: Path, target: Path, part_name: str, payload: bytes) -> None:

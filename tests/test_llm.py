@@ -107,6 +107,31 @@ def test_build_llm_attachments_respects_zero_limit(tmp_path: Path) -> None:
     assert build_llm_attachments(_make_sheet(), render_result, max_images_per_sheet=0) == []
 
 
+def test_build_llm_attachments_defaults_to_three_non_range_items(tmp_path: Path) -> None:
+    render_result = RenderSheetResult(
+        input_file_name="book.xlsx",
+        sheet_name="Sheet1",
+        temp_dir=str(tmp_path),
+        artifacts=[
+            _artifact(tmp_path / "range.png", "range", "render_artifact", "range_copy_picture", "s001-b001-paragraph", None),
+            _artifact(tmp_path / "shape.png", "shape", "markdown", "shape_copy_picture", "s001-b002-shape", "s001-b001-paragraph"),
+            _artifact(tmp_path / "chart.png", "chart", "markdown", "chart_export", "s001-b003-chart", None),
+            _artifact(tmp_path / "image.png", "image", "markdown", "ooxml_image_copy", "s001-b004-image", "s001-b001-paragraph"),
+            _artifact(tmp_path / "other-shape.png", "shape", "markdown", "shape_copy_picture", "s001-b005-shape", "s001-b001-paragraph"),
+        ],
+    )
+
+    attachments = build_llm_attachments(_make_sheet(), render_result, max_images_per_sheet=None)
+
+    assert len(attachments) == 3
+    assert all(item.kind != "range" for item in attachments)
+    assert [item.path for item in attachments] == [
+        str((tmp_path / "chart.png").resolve()),
+        str((tmp_path / "image.png").resolve()),
+        str((tmp_path / "other-shape.png").resolve()),
+    ]
+
+
 def test_parse_llm_response_accepts_plain_and_fenced_json() -> None:
     plain = '{"sheet_summary":"Summary","sections":[],"figures":[],"unknowns":[],"markdown":"# Sheet"}'
     fenced = '```json\n{"sheet_summary":"Summary","sections":[],"figures":[],"unknowns":[],"markdown":"# Sheet"}\n```'
@@ -197,6 +222,54 @@ def test_adapter_retries_once_for_invalid_json_then_succeeds(monkeypatch: pytest
     assert result.used_model is None
     assert calls["count"] == 2
     assert observed["session_kwargs"] == {"model": "text-model", "vision_model": "vision-model"}
+
+
+def test_adapter_falls_back_to_dict_attachment_payload_shape(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    observed: dict[str, object] = {}
+    attachment_path = tmp_path / "chart.png"
+    attachment_path.write_bytes(b"png")
+    render_result = RenderSheetResult(
+        input_file_name="book.xlsx",
+        sheet_name="Sheet1",
+        temp_dir=str(tmp_path),
+        artifacts=[
+            _artifact(attachment_path, "chart", "markdown", "chart_export", "s001-b001-chart", None),
+        ],
+    )
+
+    class FakeSession:
+        async def send_and_wait(self, payload):
+            observed["payload"] = payload
+            return SimpleNamespace(
+                data=SimpleNamespace(
+                    content='{"sheet_summary":"Summary","sections":[],"figures":[],"unknowns":[],"markdown":"# Sheet"}'
+                )
+            )
+
+    class FakeClient:
+        async def start(self) -> None:
+            return None
+
+        async def stop(self) -> None:
+            return None
+
+        async def create_session(self, **kwargs):
+            observed["session_kwargs"] = kwargs
+            return FakeSession()
+
+    monkeypatch.setattr(
+        "excel_semantic_md.llm.adapter._import_copilot_sdk",
+        lambda: (FakeClient, SimpleNamespace(approve_all="approve-all")),
+    )
+
+    result = asyncio.run(GitHubCopilotSdkAdapter().run_sheet_async(_make_sheet(), render_result))
+
+    assert result.status == "succeeded"
+    assert observed["session_kwargs"] == {}
+    assert observed["payload"] == {
+        "prompt": build_sheet_prompt(build_llm_input(_make_sheet(), build_llm_attachments(_make_sheet(), render_result, max_images_per_sheet=None))),
+        "attachments": [{"type": "file", "path": str(attachment_path.resolve())}],
+    }
 
 
 def test_adapter_records_used_model_when_sdk_reports_current_model(monkeypatch: pytest.MonkeyPatch) -> None:

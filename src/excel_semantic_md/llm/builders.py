@@ -10,6 +10,8 @@ from excel_semantic_md.render.types import RenderArtifact, RenderSheetResult
 from excel_semantic_md.llm.models import LlmAttachment, LlmInput, LlmRequest, LlmRunOptions
 from excel_semantic_md.llm.prompt import build_sheet_prompt
 
+DEFAULT_MAX_IMAGES_PER_SHEET = 3
+
 
 def build_llm_attachments(
     sheet: SheetModel,
@@ -28,7 +30,7 @@ def build_llm_attachments(
         key=lambda item: _attachment_sort_key(item, blocks_by_id),
     )
     if max_images_per_sheet is None:
-        return ranked
+        return [item for item in ranked if item.kind != "range"][:DEFAULT_MAX_IMAGES_PER_SHEET]
     return ranked[:max_images_per_sheet]
 
 

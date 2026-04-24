@@ -297,6 +297,8 @@ def _handle_render(args: argparse.Namespace, parser: argparse.ArgumentParser) ->
     sheet_name = _validate_sheet_name(parser, args.sheet)
     from excel_semantic_md.excel import detect_blocks, link_visuals, read_visual_metadata, read_workbook
     from excel_semantic_md.render import build_render_plan, render_with_excel_com
+    from excel_semantic_md.render.types import RenderSheetResult
+    from excel_semantic_md.models import FailureInfo
     from openpyxl.utils.exceptions import InvalidFileException
 
     try:
@@ -319,20 +321,40 @@ def _handle_render(args: argparse.Namespace, parser: argparse.ArgumentParser) ->
     for block in linked_sheet.blocks:
         warnings.extend(block.warnings)
 
-    plan_items, plan_warnings, plan_failures = build_render_plan(
-        linked_sheet,
-        visual_sheet,
-        save_render_artifacts=False,
-    )
-    warnings.extend(plan_warnings)
-    result = render_with_excel_com(
-        input_path,
-        input_file_name=workbook_read.input_file_name,
-        sheet_name=sheet_name,
-        plan_items=plan_items,
-        warnings=warnings,
-        failures=[*linked_sheet.failures, *plan_failures],
-    )
+    failures = list(linked_sheet.failures)
+    planning_complete = False
+    try:
+        plan_items, plan_warnings, plan_failures = build_render_plan(
+            linked_sheet,
+            visual_sheet,
+            save_render_artifacts=False,
+        )
+        planning_complete = True
+        warnings.extend(plan_warnings)
+        failures.extend(plan_failures)
+        result = render_with_excel_com(
+            input_path,
+            input_file_name=workbook_read.input_file_name,
+            sheet_name=sheet_name,
+            plan_items=plan_items,
+            warnings=warnings,
+            failures=failures,
+        )
+    except Exception as exc:
+        result = RenderSheetResult(
+            input_file_name=workbook_read.input_file_name,
+            sheet_name=sheet_name,
+            temp_dir=str(Path(tempfile.mkdtemp(prefix="excel-semantic-md-render-")).resolve()),
+            warnings=warnings,
+            failures=[
+                *failures,
+                FailureInfo(
+                    stage="render" if planning_complete else "render_plan",
+                    message="Render command failed unexpectedly.",
+                    details={"sheet": sheet_name, "error": str(exc)},
+                ),
+            ],
+        )
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
     return SUCCESS_EXIT_CODE if not result.failures else NOT_IMPLEMENTED_EXIT_CODE
 

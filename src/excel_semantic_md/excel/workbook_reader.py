@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time
 from decimal import Decimal
 from pathlib import Path
+import re
 from typing import Any
 from xml.etree import ElementTree
 
@@ -377,13 +378,47 @@ def _format_datetime(value: datetime, number_format: str | None) -> str:
 
 
 def _format_number(value: int | float | Decimal, number_format: str | None) -> str:
-    if number_format and "%" in number_format:
-        decimal_value = Decimal(str(value)) * Decimal("100")
-        places = _decimal_places(number_format)
-        return f"{decimal_value:.{places}f}%"
-    if isinstance(value, float) and value.is_integer():
-        return str(int(value))
-    return str(value)
+    section = _primary_number_format_section(number_format)
+    if section is None:
+        return _stringify_number(value)
+
+    normalized = _normalize_number_format_section(section)
+    if _is_complex_number_format(normalized):
+        return _stringify_number(value)
+
+    placeholder_start, placeholder_end = _placeholder_span(normalized)
+    if placeholder_start is None or placeholder_end is None:
+        return _stringify_number(value)
+
+    placeholder = normalized[placeholder_start : placeholder_end + 1]
+    if not any(char in {"0", "#"} for char in placeholder):
+        return _stringify_number(value)
+
+    prefix = normalized[:placeholder_start].strip()
+    suffix = normalized[placeholder_end + 1 :].strip()
+    is_percent = "%" in placeholder
+    placeholder = placeholder.replace("%", "")
+    integer_pattern, _, decimal_pattern = placeholder.partition(".")
+    if integer_pattern.endswith(","):
+        return _stringify_number(value)
+    use_grouping = "," in integer_pattern
+    max_places = sum(1 for char in decimal_pattern if char in {"0", "#"})
+    min_places = sum(1 for char in decimal_pattern if char == "0")
+
+    decimal_value = Decimal(str(value))
+    sign = "-" if decimal_value < 0 else ""
+    decimal_value = abs(decimal_value)
+    if is_percent:
+        decimal_value *= Decimal("100")
+
+    number_text = _format_decimal_value(
+        decimal_value,
+        use_grouping=use_grouping,
+        min_places=min_places,
+        max_places=max_places,
+    )
+    percent_suffix = "%" if is_percent else ""
+    return f"{sign}{prefix}{number_text}{percent_suffix}{suffix}"
 
 
 def _decimal_places(number_format: str) -> int:
@@ -392,6 +427,66 @@ def _decimal_places(number_format: str) -> int:
     if "." not in candidate:
         return 0
     return sum(1 for char in candidate.split(".", 1)[1] if char in {"0", "#"})
+
+
+def _stringify_number(value: int | float | Decimal) -> str:
+    if isinstance(value, Decimal):
+        if value == value.to_integral_value():
+            return str(int(value))
+        return format(value.normalize(), "f").rstrip("0").rstrip(".")
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _primary_number_format_section(number_format: str | None) -> str | None:
+    if number_format is None:
+        return None
+    section = number_format.split(";", 1)[0].strip()
+    return section or None
+
+
+def _normalize_number_format_section(section: str) -> str:
+    normalized = re.sub(r"\\(.)", r"\1", section)
+    normalized = re.sub(r"\[\$([^\]-]+)(?:-[^\]]+)?\]", r"\1", normalized)
+    normalized = re.sub(r"\[([^\]]+)\]", "", normalized)
+    normalized = re.sub(r'"([^"]*)"', r"\1", normalized)
+    return normalized.strip()
+
+
+def _is_complex_number_format(section: str) -> bool:
+    upper_section = section.upper()
+    return any(token in upper_section for token in ("E+", "E-", "_", "*", "/", "?", "@"))
+
+
+def _placeholder_span(section: str) -> tuple[int | None, int | None]:
+    indices = [index for index, char in enumerate(section) if char in {"0", "#", ".", ",", "%"}]
+    if not indices:
+        return None, None
+    return indices[0], indices[-1]
+
+
+def _format_decimal_value(
+    value: Decimal,
+    *,
+    use_grouping: bool,
+    min_places: int,
+    max_places: int,
+) -> str:
+    spec = f",.{max_places}f" if use_grouping else f".{max_places}f"
+    if max_places == 0:
+        spec = ",.0f" if use_grouping else ".0f"
+    rendered = format(value, spec)
+    if max_places == 0:
+        return rendered
+    integer_part, decimal_part = rendered.split(".", 1)
+    if len(decimal_part) > min_places:
+        decimal_part = decimal_part.rstrip("0")
+        if len(decimal_part) < min_places:
+            decimal_part = decimal_part.ljust(min_places, "0")
+    if not decimal_part:
+        return integer_part
+    return f"{integer_part}.{decimal_part}"
 
 
 __all__ = [

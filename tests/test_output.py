@@ -528,9 +528,10 @@ def test_convert_command_writes_outputs_and_only_fails_in_strict_mode(tmp_path: 
 
     class FakeAdapter:
         def run_sheet(self, sheet, render_result, *, options, request):
-            assert render_result is not None
+            assert render_result is None
             assert options.model == "text-model"
             assert request.input.sheet_name == sheet.name
+            assert request.attachments == []
             return LlmRunResult(
                 status="succeeded",
                 attempts=1,
@@ -598,7 +599,7 @@ def test_run_convert_pipeline_uses_prepared_llm_request_for_debug_payload(
 ) -> None:
     input_path = tmp_path / "book.xlsx"
     input_path.write_bytes(b"placeholder")
-    render_path = tmp_path / "render-prepared-request" / "sheet-001" / "range.png"
+    render_path = tmp_path / "render-prepared-request" / "sheet-001" / "chart.png"
     render_path.parent.mkdir(parents=True)
     render_path.write_bytes(b"png")
     observed: dict[str, object] = {}
@@ -606,11 +607,12 @@ def test_run_convert_pipeline_uses_prepared_llm_request_for_debug_payload(
         sheet_index=1,
         name="PreparedRequest",
         blocks=[
-            ParagraphBlock(
-                id="s001-b001-paragraph",
-                anchor=Rect(sheet="PreparedRequest", start_row=1, start_col=1, end_row=1, end_col=1, a1="A1"),
-                source=SourceKind.CELLS,
-                text="Paragraph",
+            ChartBlock(
+                id="s001-b001-chart",
+                anchor=Rect(sheet="PreparedRequest", start_row=2, start_col=2, end_row=6, end_col=6, a1="B2:F6"),
+                source=SourceKind.CHART,
+                visual_id="s001-v001-chart",
+                title="Prepared Chart",
             )
         ],
     )
@@ -634,9 +636,9 @@ def test_run_convert_pipeline_uses_prepared_llm_request_for_debug_payload(
             [
                 RenderPlanItem(
                     block=sheet.blocks[0],
-                    kind="range",
-                    role=SimpleNamespace(value="render_artifact"),
-                    source="range_copy_picture",
+                    kind="chart",
+                    role=SimpleNamespace(value="markdown"),
+                    source="chart_export",
                 )
             ],
             [],
@@ -652,12 +654,12 @@ def test_run_convert_pipeline_uses_prepared_llm_request_for_debug_payload(
             artifacts=[
                 RenderArtifact(
                     block_id=sheet.blocks[0].id,
-                    visual_id=None,
+                    visual_id="s001-v001-chart",
                     related_block_id=None,
-                    kind="range",
-                    role="render_artifact",
+                    kind="chart",
+                    role="markdown",
                     path=str(render_path),
-                    source="range_copy_picture",
+                    source="chart_export",
                     anchor=sheet.blocks[0].anchor,
                 )
             ],
@@ -706,21 +708,21 @@ def test_run_convert_pipeline_uses_prepared_llm_request_for_debug_payload(
     assert observed["request_attachments"] == [
         {
             "path": str(render_path.resolve()),
-            "block_id": "s001-b001-paragraph",
+            "block_id": "s001-b001-chart",
             "related_block_id": None,
-            "kind": "range",
-            "source": "range_copy_picture",
-            "priority": 2,
+            "kind": "chart",
+            "source": "chart_export",
+            "priority": 0,
         }
     ]
     assert debug_payload["sheets"][0]["input"]["assets"] == [
         {
-            "path": "range.png",
-            "block_id": "s001-b001-paragraph",
+            "path": "chart.png",
+            "block_id": "s001-b001-chart",
             "related_block_id": None,
-            "kind": "range",
-            "source": "range_copy_picture",
-            "priority": 2,
+            "kind": "chart",
+            "source": "chart_export",
+            "priority": 0,
         }
     ]
     assert "PreparedRequest" in observed["request_prompt"]
@@ -733,11 +735,12 @@ def test_run_convert_pipeline_normalizes_render_exception_to_failed_sheet(tmp_pa
         sheet_index=1,
         name="RenderExplodes",
         blocks=[
-            ParagraphBlock(
-                id="s001-b001-paragraph",
-                anchor=Rect(sheet="RenderExplodes", start_row=1, start_col=1, end_row=1, end_col=1, a1="A1"),
-                source=SourceKind.CELLS,
-                text="Paragraph",
+            ChartBlock(
+                id="s001-b001-chart",
+                anchor=Rect(sheet="RenderExplodes", start_row=2, start_col=2, end_row=6, end_col=6, a1="B2:F6"),
+                source=SourceKind.CHART,
+                visual_id="s001-v001-chart",
+                title="Exploding chart",
             )
         ],
     )
@@ -761,9 +764,9 @@ def test_run_convert_pipeline_normalizes_render_exception_to_failed_sheet(tmp_pa
             [
                 RenderPlanItem(
                     block=sheet.blocks[0],
-                    kind="range",
-                    role=SimpleNamespace(value="render_artifact"),
-                    source="range_copy_picture",
+                    kind="chart",
+                    role=SimpleNamespace(value="markdown"),
+                    source="chart_export",
                 )
             ],
             [],
@@ -965,6 +968,190 @@ def test_run_convert_pipeline_treats_failed_llm_status_without_failure_object_as
     assert result.sheets[0].status == "failed"
     assert result.sheets[0].failures[0].stage == "llm"
     assert "without details" in result.sheets[0].failures[0].message
+
+
+def test_run_convert_pipeline_skips_render_for_cell_only_sheet(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_path = Path(__file__).resolve().parent / "fixtures" / "visuals" / "no-visuals.xlsx"
+    observed: dict[str, object] = {}
+
+    class ObservingAdapter:
+        def run_sheet(self, sheet, render_result, *, options, request):
+            observed["sheet_name"] = sheet.name
+            observed["render_result"] = render_result
+            observed["attachments"] = [attachment.to_dict() for attachment in request.attachments]
+            return LlmRunResult(
+                status="succeeded",
+                attempts=1,
+                response=LlmResponse(
+                    sheet_summary="Plain sheet",
+                    sections=[],
+                    figures=[],
+                    unknowns=[],
+                    markdown="Plain markdown",
+                ),
+            )
+
+    monkeypatch.setattr(
+        "excel_semantic_md.app.convert_pipeline.render_with_excel_com",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("render must not run for cell-only sheets")),
+    )
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.GitHubCopilotSdkAdapter", ObservingAdapter)
+
+    result = run_convert_pipeline(
+        input_path,
+        tmp_path / "out",
+        command_options={
+            "model": None,
+            "vision_model": None,
+            "max_images_per_sheet": None,
+            "save_debug_json": False,
+            "save_render_artifacts": False,
+            "strict": False,
+        },
+    )
+
+    assert result.failed_sheet_count == 0
+    assert result.sheets[0].status == "succeeded"
+    assert result.sheets[0].render_result is None
+    assert result.sheets[0].markdown == "Plain markdown"
+    assert observed == {
+        "sheet_name": "Plain",
+        "render_result": None,
+        "attachments": [],
+    }
+
+
+def test_run_convert_pipeline_skips_render_for_cell_only_sheet_with_zero_image_limit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_path = Path(__file__).resolve().parent / "fixtures" / "visuals" / "no-visuals.xlsx"
+    observed: dict[str, object] = {}
+
+    class ObservingAdapter:
+        def run_sheet(self, _sheet, render_result, *, options, request):
+            observed["render_result"] = render_result
+            observed["max_images_per_sheet"] = options.max_images_per_sheet
+            observed["attachments"] = [attachment.to_dict() for attachment in request.attachments]
+            return LlmRunResult(
+                status="succeeded",
+                attempts=1,
+                response=LlmResponse(
+                    sheet_summary="Plain sheet",
+                    sections=[],
+                    figures=[],
+                    unknowns=[],
+                    markdown="Plain markdown",
+                ),
+            )
+
+    monkeypatch.setattr(
+        "excel_semantic_md.app.convert_pipeline.render_with_excel_com",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("render must not run when image limit is zero and no visual blocks exist")),
+    )
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.GitHubCopilotSdkAdapter", ObservingAdapter)
+
+    result = run_convert_pipeline(
+        input_path,
+        tmp_path / "out",
+        command_options={
+            "model": None,
+            "vision_model": None,
+            "max_images_per_sheet": 0,
+            "save_debug_json": False,
+            "save_render_artifacts": False,
+            "strict": False,
+        },
+    )
+
+    assert result.failed_sheet_count == 0
+    assert result.sheets[0].status == "succeeded"
+    assert observed == {
+        "render_result": None,
+        "max_images_per_sheet": 0,
+        "attachments": [],
+    }
+
+
+def test_run_convert_pipeline_preserves_explicit_render_artifacts_for_cell_only_sheet(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_path = Path(__file__).resolve().parent / "fixtures" / "visuals" / "no-visuals.xlsx"
+    render_path = tmp_path / "render-cell-only" / "sheet-001" / "range.png"
+    observed: dict[str, object] = {}
+
+    class ObservingAdapter:
+        def run_sheet(self, _sheet, render_result, *, options, request):
+            observed["render_result"] = render_result
+            observed["attachments"] = [attachment.to_dict() for attachment in request.attachments]
+            observed["save_render_artifacts"] = options.max_images_per_sheet
+            return LlmRunResult(
+                status="succeeded",
+                attempts=1,
+                response=LlmResponse(
+                    sheet_summary="Plain sheet",
+                    sections=[],
+                    figures=[],
+                    unknowns=[],
+                    markdown="Plain markdown",
+                ),
+            )
+
+    def fake_render_with_excel_com(
+        _input_path: Path,
+        *,
+        input_file_name: str,
+        sheet_name: str,
+        plan_items,
+        warnings,
+        failures,
+    ) -> RenderSheetResult:
+        render_path.parent.mkdir(parents=True, exist_ok=True)
+        render_path.write_bytes(b"png")
+        return RenderSheetResult(
+            input_file_name=input_file_name,
+            sheet_name=sheet_name,
+            temp_dir=str(tmp_path / "render-cell-only"),
+            artifacts=[
+                RenderArtifact(
+                    block_id=plan_items[0].block.id,
+                    visual_id=None,
+                    related_block_id=None,
+                    kind="range",
+                    role="render_artifact",
+                    path=str(render_path),
+                    source="range_copy_picture",
+                    anchor=plan_items[0].block.anchor,
+                )
+            ],
+            warnings=list(warnings),
+            failures=list(failures),
+        )
+
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.render_with_excel_com", fake_render_with_excel_com)
+    monkeypatch.setattr("excel_semantic_md.app.convert_pipeline.GitHubCopilotSdkAdapter", ObservingAdapter)
+
+    result = run_convert_pipeline(
+        input_path,
+        tmp_path / "out",
+        command_options={
+            "model": None,
+            "vision_model": None,
+            "max_images_per_sheet": None,
+            "save_debug_json": False,
+            "save_render_artifacts": True,
+            "strict": False,
+        },
+    )
+
+    assert result.failed_sheet_count == 0
+    assert result.sheets[0].render_result is not None
+    assert observed["render_result"] is not None
+    assert observed["attachments"] == []
 
 
 def _artifact(

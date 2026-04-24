@@ -230,3 +230,24 @@ README は背景・全体像・初期構想の参考資料として扱う。
 - LLM request は `build_llm_request()` で attachments、LLM input、prompt を一括生成する。`convert` の debug 用 `llm_input_payload` と `GitHubCopilotSdkAdapter` の実送信用 prompt / attachments は同じ request 由来にする。
 - workbook read -> block detection -> visual metadata -> linking の重複統合は今回は見送った。仕様不一致ではなく保守性改善であり、今回の安全性修正に混ぜると過剰リファクタになるため。
 - 自動テストは `python -m pytest -q` で `95 passed`。Copilot SDK local CLI behavior、vision attachment behavior、実 Excel COM、実 `.xlsm` macro-disabled behavior は引き続き live confirmation 対象である。
+
+## 20. 2026-04-24 再レビュー引き継ぎメモ
+
+2026-04-24 の「要件定義をもとに、仕様と実装をレビュー」では、実装変更を入れずに review note だけを更新した。
+
+- `convert` は現状、cell-based block に対しても常に `range_copy_picture` を計画するため、単純な table / paragraph workbook でも Excel COM が使えないと sheet failed になる。`--max-images-per-sheet 0` でもこの依存は消えない。
+- `--max-images-per-sheet` 未指定時は render artifact を全件 Copilot 添付候補にするため、Phase 1 の「全画像を無差別に送らない」契約に対して過剰実装になっている。
+- OOXML image の `target_part` は存在確認だけで publish / attach 対象になっており、`content_type` が画像かどうかを検証していない。細工した workbook では非画像 part や macro binary を asset として複製しうる。
+- `render` CLI は `build_render_plan()` や `render_with_excel_com()` の予期しない例外を JSON failure に正規化せず、そのまま例外終了しうる。
+- `render_with_excel_com()` は artifact ごとの failure 正規化が `RenderTaskError` だけなので、素の COM/OSError では残り artifact を継続せず sheet-level generic failure に崩れる。
+- 表示値の文字列化は `%` と整数化された float を主に扱っており、通貨、桁区切り、小数桁指定など `number_format` 依存の表示値再現は未充足である。
+- OOXML warning-only 継続経路と attachment 互換フォールバックには、追加の回帰テスト余地が残っている。
+
+## 21. 2026-04-24 Re-review Fix Batch 実装メモ
+
+- `convert` は render planning の結果から cell-based `range_copy_picture` を既定 render 対象から外す。render item が空の sheet は Excel COM を使わずに LLM へ進める。
+- `--max-images-per-sheet` 未指定時の既定値は 3。既定添付候補は `chart` / `image` / `shape` の主要 visual に限定し、`range_copy_picture` は既定 attachment 候補から外す。
+- `--max-images-per-sheet 0` は attachment 0 件を意味する。visual block が無い sheet では render を起動しない。
+- OOXML image original asset は `image/*` content-type allowlist を満たす場合だけ `ooxml_image_copy` を計画する。non-image content type、missing target、missing part は warning-and-skip にする。
+- `render` CLI は planning/rendering の unexpected exception を JSON failure に正規化する。`render_with_excel_com()` は artifact 単位の通常例外も failure 化して後続 item を継続する。
+- 表示値フォーマットは conservative subset として percent / currency / grouping / fixed decimals を扱う。scientific / fraction / accounting は fallback を維持する。

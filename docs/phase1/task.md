@@ -296,3 +296,13 @@ Phase 1 では `resume` / session persistence を実装しない。
 - [ ] Copilot SDK local CLI behavior を live confirmation で確認する。
 - [ ] vision attachment behavior を live confirmation で確認する。
 - [ ] 実 Excel COM による `.xlsm` macro-disabled behavior を live confirmation で確認する。
+- [x] 2026-04-24 の再レビューで追加指摘事項を `docs/review/phase1/phase1-requirements-implementation-review.md` に記録し、修正は次フェーズへ送る。
+
+## 17. 2026-04-24 Re-review Fix Batch 実装
+
+- [x] `convert` で cell-only / table-only / paragraph-only sheet の render 必須依存を外し、render item が空なら Excel COM を使わずに LLM へ進める。
+- [x] `convert --max-images-per-sheet 0` で attachment 0 件を保証し、visual block が無い sheet では render を起動しない。
+- [x] `--max-images-per-sheet` 未指定時の既定値を主要 visual 最大 3 件に固定し、range screenshot を既定 attachment 候補から除外した。
+- [x] OOXML image original asset を `image/*` content-type allowlist で制限し、非 image target は warning-and-skip にした。
+- [x] `render` CLI の unexpected exception を JSON failure に正規化し、artifact 単位の通常例外でも後続 render を継続する。
+- [x] `number_format` の conservative subset として currency / grouping / fixed decimals の表示値文字列化を追加した。

@@ -665,3 +665,10 @@ strict では最終終了コードを失敗にする。
 
 2026-04-21 のユーザー回答により、Phase 1 では `resume` / session persistence は不要と判断した。
 そのため、`resume` コマンドと `--resume` オプションは Phase 1 では実装しない。
+
+## 14. 2026-04-24 Re-review Fix Batch Clarifications
+
+- `convert` は cell-based block の `range_copy_picture` を常時 render 必須にはしない。cell-only / table-only / paragraph-only sheet で render item が空なら、Excel COM を使わずに LLM へ進む。
+- `--max-images-per-sheet` 未指定時の既定値は 3。既定 attachment 候補は `chart` / `image` / `shape` の主要 visual に限定し、`range_copy_picture` による cell screenshot は既定添付候補に含めない。
+- `--max-images-per-sheet 0` は attachment 0 件を意味する。visual block が無い sheet では render を起動しない。
+- OOXML image original asset は `image/*` content type allowlist を満たす target part だけを copy / publish / attach する。non-image content type、missing target、missing part は warning-and-skip とする。

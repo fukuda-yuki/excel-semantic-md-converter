@@ -224,6 +224,28 @@ def test_normalizes_text_numbers_dates_percentages_and_merged_cells(tmp_path: Pa
     assert "do not include" not in payload
 
 
+def test_formats_currency_grouping_and_fixed_decimals_conservatively(tmp_path: Path) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Numbers"
+    sheet["A1"] = 1234.5
+    sheet["A1"].number_format = "$#,##0.00"
+    sheet["A2"] = 1234
+    sheet["A2"].number_format = "#,##0"
+    sheet["A3"] = 12.3
+    sheet["A3"].number_format = "0.000"
+    sheet["A4"] = 1200
+    sheet["A4"].number_format = "0,"
+    input_path = _save_workbook(workbook, tmp_path / "number-formats.xlsx")
+
+    cells = read_workbook(input_path).to_dict()["sheets"][0]["cells"]
+
+    assert {"row": 1, "col": 1, "a1": "A1", "text": "$1,234.50"} in cells
+    assert {"row": 2, "col": 1, "a1": "A2", "text": "1,234"} in cells
+    assert {"row": 3, "col": 1, "a1": "A3", "text": "12.300"} in cells
+    assert {"row": 4, "col": 1, "a1": "A4", "text": "1200"} in cells
+
+
 def test_inspect_command_outputs_workbook_reading_json(tmp_path: Path) -> None:
     workbook = Workbook()
     workbook.active["A1"] = "Inspect me"

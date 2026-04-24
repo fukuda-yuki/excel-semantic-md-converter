@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import platform
 import tempfile
 import zipfile
@@ -175,6 +176,19 @@ def render_with_excel_com(
                         )
                     )
                     continue
+                except Exception as exc:
+                    result.failures.append(
+                        FailureInfo(
+                            stage="render",
+                            message="Render artifact failed unexpectedly.",
+                            details={
+                                "block_id": item.block.id,
+                                "kind": item.kind,
+                                "error": str(exc),
+                            },
+                        )
+                    )
+                    continue
                 result.artifacts.append(artifact)
     except Exception as exc:
         result.failures.append(
@@ -217,27 +231,32 @@ def _render_plan_item(
     counters: dict[tuple[str, str, str], int],
 ) -> RenderArtifact:
     output_path = _next_output_path(output_dir, item, counters)
-    if item.source == "ooxml_image_copy":
-        _copy_package_part(workbook_path, item.target_part, output_path)
-    elif item.kind == "range":
-        range_ref = worksheet.Range(item.block.anchor.a1)
-        _copy_object_to_png(worksheet, range_ref, output_path)
-    elif item.kind == "chart":
-        chart_object = _match_chart_object(worksheet, item)
-        exported = chart_object.Chart.Export(str(output_path), "PNG")
-        if exported is False:
+    try:
+        if item.source == "ooxml_image_copy":
+            _copy_package_part(workbook_path, item.target_part, output_path)
+        elif item.kind == "range":
+            range_ref = worksheet.Range(item.block.anchor.a1)
+            _copy_object_to_png(worksheet, range_ref, output_path)
+        elif item.kind == "chart":
+            chart_object = _match_chart_object(worksheet, item)
+            exported = chart_object.Chart.Export(str(output_path), "PNG")
+            if exported is False:
+                raise RenderTaskError(
+                    "Chart.Export returned False.",
+                    details={"block_id": item.block.id, "path": output_path.name},
+                )
+        elif item.kind in {"shape", "image"}:
+            shape = _match_shape_object(worksheet, item)
+            _copy_object_to_png(worksheet, shape, output_path)
+        else:
             raise RenderTaskError(
-                "Chart.Export returned False.",
-                details={"block_id": item.block.id, "path": output_path.name},
+                "Render plan item kind is not supported.",
+                details={"block_id": item.block.id, "kind": item.kind},
             )
-    elif item.kind in {"shape", "image"}:
-        shape = _match_shape_object(worksheet, item)
-        _copy_object_to_png(worksheet, shape, output_path)
-    else:
-        raise RenderTaskError(
-            "Render plan item kind is not supported.",
-            details={"block_id": item.block.id, "kind": item.kind},
-        )
+    except Exception:
+        with contextlib.suppress(OSError):
+            output_path.unlink(missing_ok=True)
+        raise
 
     return RenderArtifact(
         block_id=item.block.id,

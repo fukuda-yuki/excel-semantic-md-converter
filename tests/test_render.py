@@ -413,6 +413,148 @@ def test_render_command_success_outputs_contract_without_convert_outputs(
         artifact_path.unlink(missing_ok=True)
 
 
+def test_render_command_normalizes_unexpected_planning_exception_to_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "excel_semantic_md.render.build_render_plan",
+        mock.Mock(side_effect=RuntimeError("plan boom")),
+    )
+
+    code, stdout, stderr = _run_cli(["render", "--input", str(FIXTURES / "no-visuals.xlsx"), "--sheet", "Plain"])
+    payload = json.loads(stdout)
+
+    try:
+        assert code == 1
+        assert stderr == ""
+        assert payload["failures"][0]["stage"] == "render_plan"
+        assert payload["failures"][0]["details"]["error"] == "plan boom"
+    finally:
+        shutil.rmtree(payload["temp_dir"], ignore_errors=True)
+
+
+def test_render_with_excel_com_continues_after_unexpected_artifact_exception(tmp_path: Path) -> None:
+    first_block = ParagraphBlock(
+        id="s001-b001-paragraph",
+        anchor=Rect(sheet="Plain", start_row=1, start_col=1, end_row=1, end_col=1, a1="A1"),
+        source=SourceKind.CELLS,
+        text="First",
+    )
+    second_block = ParagraphBlock(
+        id="s001-b002-paragraph",
+        anchor=Rect(sheet="Plain", start_row=2, start_col=1, end_row=2, end_col=1, a1="A2"),
+        source=SourceKind.CELLS,
+        text="Second",
+    )
+    plan_items = [
+        RenderPlanItem(block=first_block, kind="range", role=AssetRole.RENDER_ARTIFACT, source="range_copy_picture"),
+        RenderPlanItem(block=second_block, kind="range", role=AssetRole.RENDER_ARTIFACT, source="range_copy_picture"),
+    ]
+    worksheet = SimpleNamespace()
+    session = mock.MagicMock()
+    session.__enter__.return_value = session
+    session.__exit__.return_value = None
+    session.worksheet.return_value = worksheet
+    session.cleanup_warnings = []
+
+    def fake_render_plan_item(*, item: RenderPlanItem, output_dir: Path, **_kwargs):
+        if item.block.id == "s001-b001-paragraph":
+            raise RuntimeError("copy boom")
+        artifact_path = output_dir / "second.png"
+        artifact_path.write_bytes(b"png")
+        return RenderArtifact(
+            block_id=item.block.id,
+            visual_id=None,
+            related_block_id=None,
+            kind=item.kind,
+            role=item.role.value,
+            path=str(artifact_path),
+            source=item.source,
+            anchor=item.block.anchor,
+        )
+
+    with (
+        mock.patch("excel_semantic_md.render.excel_com_renderer.excel_com_diagnostic", return_value=(True, "ok")),
+        mock.patch("excel_semantic_md.render.excel_com_renderer.ExcelSession", return_value=session),
+        mock.patch("excel_semantic_md.render.excel_com_renderer._render_plan_item", side_effect=fake_render_plan_item),
+    ):
+        result = render_with_excel_com(
+            FIXTURES / "no-visuals.xlsx",
+            input_file_name="no-visuals.xlsx",
+            sheet_name="Plain",
+            plan_items=plan_items,
+            warnings=[],
+            failures=[],
+        )
+
+    try:
+        assert [artifact.block_id for artifact in result.artifacts] == ["s001-b002-paragraph"]
+        assert [failure.to_dict() for failure in result.failures] == [
+            {
+                "stage": "render",
+                "message": "Render artifact failed unexpectedly.",
+                "details": {
+                    "block_id": "s001-b001-paragraph",
+                    "kind": "range",
+                    "error": "copy boom",
+                },
+            }
+        ]
+    finally:
+        shutil.rmtree(result.temp_dir, ignore_errors=True)
+
+
+def test_render_with_excel_com_removes_partial_output_after_unexpected_failure() -> None:
+    block = ParagraphBlock(
+        id="s001-b001-paragraph",
+        anchor=Rect(sheet="Plain", start_row=1, start_col=1, end_row=1, end_col=1, a1="A1"),
+        source=SourceKind.CELLS,
+        text="First",
+    )
+    plan_item = RenderPlanItem(block=block, kind="range", role=AssetRole.RENDER_ARTIFACT, source="range_copy_picture")
+    worksheet = SimpleNamespace(Range=mock.Mock(return_value=SimpleNamespace()))
+    session = mock.MagicMock()
+    session.__enter__.return_value = session
+    session.__exit__.return_value = None
+    session.worksheet.return_value = worksheet
+    session.cleanup_warnings = []
+
+    def fake_copy_object_to_png(_worksheet, _excel_object, output_path: Path) -> None:
+        output_path.write_bytes(b"partial")
+        raise RuntimeError("copy boom")
+
+    with (
+        mock.patch("excel_semantic_md.render.excel_com_renderer.excel_com_diagnostic", return_value=(True, "ok")),
+        mock.patch("excel_semantic_md.render.excel_com_renderer.ExcelSession", return_value=session),
+        mock.patch("excel_semantic_md.render.excel_com_renderer._copy_object_to_png", side_effect=fake_copy_object_to_png),
+    ):
+        result = render_with_excel_com(
+            FIXTURES / "no-visuals.xlsx",
+            input_file_name="no-visuals.xlsx",
+            sheet_name="Plain",
+            plan_items=[plan_item],
+            warnings=[],
+            failures=[],
+        )
+
+    try:
+        assert result.artifacts == []
+        assert [failure.to_dict() for failure in result.failures] == [
+            {
+                "stage": "render",
+                "message": "Render artifact failed unexpectedly.",
+                "details": {
+                    "block_id": "s001-b001-paragraph",
+                    "kind": "range",
+                    "error": "copy boom",
+                },
+            }
+        ]
+        assert list(Path(result.temp_dir).rglob("*.png")) == []
+    finally:
+        shutil.rmtree(result.temp_dir, ignore_errors=True)
+
+
 def test_render_command_rejects_unknown_sheet_name() -> None:
     code, _stdout, stderr = _run_cli(["render", "--input", str(FIXTURES / "no-visuals.xlsx"), "--sheet", "Missing"])
 
